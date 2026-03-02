@@ -1,0 +1,26 @@
+[project]
+name = "api-nascrystal-ru"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "aiosqlite>=0.21.0",
+    "aiomysql>=0.3.2",
+    "alembic>=1.18.4",
+    "bcrypt>=5.0.0",
+    "fastapi>=0.133.0",
+    "pydantic>=2.12.5",
+    "pydantic-settings>=2.13.1",
+    "pyjwt>=2.11.0",
+    "python-dotenv>=1.2.1",
+    "pyyaml>=6.0.3",
+    "sqlalchemy>=2.0.46",
+    "uvicorn[standard]>=0.41.0",
+]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "pytest>=8.4.2",
+]

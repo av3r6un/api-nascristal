@@ -1,0 +1,11 @@
+.git
+.venv
+.pytest_cache
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+*.db
+dev.db
+test.db
+uv.lock.bak

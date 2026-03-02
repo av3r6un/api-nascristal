@@ -1,0 +1,19 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      STAGE: PROD
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_NAME: ${DB_NAME:-nascrystal}
+      DB_USER: ${DB_USER:-nascrystal}
+      DB_PASS: ${DB_PASS:-nascrystal}
+      SECRET_KEY: ${SECRET_KEY:-change-me-with-32-plus-random-characters}
+      JWT_TOKEN_EXPIRES: ${JWT_TOKEN_EXPIRES:-86400}
+      JWT_REFRESH_TOKEN_EXPIRES: ${JWT_REFRESH_TOKEN_EXPIRES:-604800}
+    expose:
+      - "8000"
+
