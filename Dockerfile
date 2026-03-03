@@ -16,4 +16,4 @@ COPY src ./src
 COPY alembic ./alembic
 COPY alembic.ini ./
 
-CMD ["uv", "run", "uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+CMD ["sh", "-c", "i=0; until uv run alembic upgrade head; do i=$((i+1)); if [ $i -ge 30 ]; then echo 'Migration failed after 30 attempts'; exit 1; fi; echo 'Waiting for database...'; sleep 2; done; exec uv run uvicorn src.main:app --host 0.0.0.0 --port 8000 --workers 1"]
