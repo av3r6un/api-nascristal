@@ -9,3 +9,5 @@ __pycache__
 dev.db
 test.db
 uv.lock.bak
+docker-compose.example.yml
+tests/

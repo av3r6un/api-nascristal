@@ -115,7 +115,7 @@ def _save_uploaded_file(rel_path: str, body: bytes) -> str:
   if not abs_path.startswith(root + os.sep) and abs_path != root:
     raise ValueError('path traversal blocked')
   os.makedirs(os.path.dirname(abs_path), exist_ok=True)
-  with open(abs_path, 'ab') as f:
+  with open(abs_path, 'wb') as f:
     f.write(body)
   return abs_path
 
