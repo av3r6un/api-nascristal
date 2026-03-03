@@ -19,7 +19,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     op.create_index(
-        "uq_locale_overrides_locale_key_path",
+        "uq_locale_overrides_locale_key",
         "locale_overrides",
         ["locale", "key"],
         unique=True,
