@@ -1,6 +1,7 @@
 from .config import settings
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from src.models.base import Base
+import src.models  # Ensure all models are imported before metadata operations.
 
 DATABASE_URL = settings.db_url
 
