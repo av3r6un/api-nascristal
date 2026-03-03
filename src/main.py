@@ -15,8 +15,7 @@ from src.exceptions.base import BaseError
 @asynccontextmanager
 async def lifespan(app: FastAPI):
   try:
-    # await create_db()
-    print('Initializing DB')
+    await create_db()
   except Exception as exc:
     print(f"Database initialization skipped: {exc}")
   yield
