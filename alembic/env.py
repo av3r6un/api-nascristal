@@ -9,7 +9,7 @@ from alembic import context
 
 from src.core.config import settings
 from src.models.base import Base
-#import src.models.user
+import src.models  # noqa: F401  # Import models so metadata is populated for autogenerate
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
