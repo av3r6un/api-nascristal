@@ -6,7 +6,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from src.core.database import create_db, session_maker
+from src.core.database import session_maker
 from src.exceptions import JSRError
 from src.utils.auth import extract_bearer_token, user_from_token
 from src.api import routers
@@ -14,10 +14,6 @@ from src.exceptions.base import BaseError
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-  try:
-    await create_db()
-  except Exception as exc:
-    print(f"Database initialization skipped: {exc}")
   yield
 
 
