@@ -3,13 +3,14 @@ from fastapi import APIRouter, Depends
 
 from src.core.database import get_db
 from src.exceptions import JSRError
-from src.models.locale_overrides import Locale, LocaleOverride
+from src.models import LocaleOverride, StaticPage
+from src.models.locale_overrides import Locale
 from src.schemas import I18nPatchResponse
 
 router = APIRouter(prefix="/api/i18n", tags=["i18n"])
 
 
-def _build_patch(overrides: list[LocaleOverride]) -> dict:
+def _build_patch(overrides: list[LocaleOverride], **kwargs) -> dict:
   patch: dict = {}
 
   for item in overrides:
@@ -27,7 +28,7 @@ def _build_patch(overrides: list[LocaleOverride]) -> dict:
 
     cursor[keys[-1]] = item.value
 
-  return patch
+  return patch | kwargs
 
 
 @router.get("/{locale}", response_model=I18nPatchResponse)
@@ -36,4 +37,5 @@ async def get_i18n_patch(locale: str, session: AsyncSession = Depends(get_db)) -
     raise JSRError("bad_request", message="Locale must be 'en' or 'ru'")
 
   rows = await LocaleOverride.all(session, locale=Locale(locale), is_active=True)
-  return _build_patch(rows)
+  extra_locales = await StaticPage.collect_locales(session, locale)
+  return _build_patch(rows, **extra_locales)
