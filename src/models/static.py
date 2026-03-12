@@ -24,6 +24,16 @@ class StaticPage(Base):
   def __init__(self, slug, **kwargs) -> None:
     self.slug = slug
     self.status = PageStatus(kwargs.get('status')).name if kwargs.get('status') else None
+    
+  @classmethod
+  async def collect_locales(cls, session, locale):
+    navbar = {}
+    pages = await cls.all(session)
+    for page in pages:
+      for tr in page.translations:
+        if tr.locale == locale:
+          navbar[page.slug] = tr.title
+    return dict(navbar=navbar)
   
   @property
   def json(self):
