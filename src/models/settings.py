@@ -11,6 +11,7 @@ class SettingsKeys(enum.Enum):
   LOGO_URL = 'logo_url'
   SOCIALS = 'socials'
   CONTACTS = 'contacts'
+  MAP = 'map'
   SEO = 'seo'
   MAINTENANCE = 'maintenance'
   
