@@ -1,11 +1,14 @@
 from .config import settings
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+import json
 
 DATABASE_URL = settings.db_url
 
 engine_kwargs: dict = dict(
   url=DATABASE_URL,
   echo=False,
+  json_serializer=lambda obj: json.dumps(obj, ensure_ascii=False, indent=2),
+  json_deserializer=json.loads,
 )
 
 # MySQL-specific pool/connect tuning. SQLite does not support these params.
