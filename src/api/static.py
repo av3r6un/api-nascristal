@@ -2,6 +2,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from fastapi import APIRouter, Depends, Request
 
+from src.core.change_logging import record_change
 from src.core.database import get_db
 from src.exceptions import JSRError
 from src.models import StaticPage, StaticPagesTranslation
@@ -42,10 +43,13 @@ async def fetch_pages(locale: str, request: Request, session: AsyncSession = Dep
 @router.post('/', status_code=200)
 async def save_page(payload: StaticPageRequest, request: Request, session: AsyncSession = Depends(get_db)) -> dict[str, bool]:
   page = await StaticPage.first(session, slug=payload.slug)
+  page_created = False
+  previous_status = page.status.value if page else None
   if not page:
     page = StaticPage(payload.slug, status=payload.status)
     await page.save(session)
     await session.flush()
+    page_created = True
   
   already_set_translation = await StaticPagesTranslation.first(session, page_id=page.id, locale=payload.locale)
   if already_set_translation:
@@ -53,6 +57,25 @@ async def save_page(payload: StaticPageRequest, request: Request, session: Async
   else:
     translation = StaticPagesTranslation(page.id, **payload.model_dump())
     await translation.save(session)
+
+  actor_uid = getattr(request.state, "user_uid", None)
+  if page_created:
+    await record_change(session, "static.page.created", payload={"slug": payload.slug}, actor_uid=actor_uid)
+
+  await record_change(
+    session,
+    "static.page.updated",
+    payload={"slug": payload.slug, "locale": payload.locale},
+    actor_uid=actor_uid,
+  )
+
+  if previous_status != payload.status:
+    await record_change(
+      session,
+      "static.page.status_changed",
+      payload={"slug": payload.slug, "status": payload.status},
+      actor_uid=actor_uid,
+    )
   return dict(processed=True)
 
 

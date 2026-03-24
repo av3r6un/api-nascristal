@@ -1,0 +1,871 @@
+2026-03-20 13:43:02 | INFO | method=GET path=/health status=200 duration_ms=1.60 ip=testclient user_uid=-
+2026-03-20 13:43:02 | ERROR | method=POST path=/auth/register status=500 duration_ms=258.08 ip=testclient user_uid=-
+Traceback (most recent call last):
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\sqlalchemy\engine\base.py", line 1967, in _exec_single_context
+    self.dialect.do_execute(
+    ~~~~~~~~~~~~~~~~~~~~~~~^
+        cursor, str_statement, effective_parameters, context
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\sqlalchemy\engine\default.py", line 952, in do_execute
+    cursor.execute(statement, parameters)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\sqlalchemy\dialects\sqlite\aiosqlite.py", line 182, in execute
+    self._adapt_connection._handle_exception(error)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\sqlalchemy\dialects\sqlite\aiosqlite.py", line 342, in _handle_exception
+    raise error
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\sqlalchemy\dialects\sqlite\aiosqlite.py", line 164, in execute
+    self.await_(_cursor.execute(operation, parameters))
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\sqlalchemy\util\_concurrency_py3k.py", line 132, in await_only
+    return current.parent.switch(awaitable)  # type: ignore[no-any-return,attr-defined] # noqa: E501
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\sqlalchemy\util\_concurrency_py3k.py", line 196, in greenlet_spawn
+    value = await result
+            ^^^^^^^^^^^^
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\aiosqlite\cursor.py", line 40, in execute
+    await self._execute(self._cursor.execute, sql, parameters)
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\aiosqlite\cursor.py", line 32, in _execute
+    return await self._conn._execute(fn, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\aiosqlite\core.py", line 160, in _execute
+    return await future
+           ^^^^^^^^^^^^
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\aiosqlite\core.py", line 63, in _connection_worker_thread
+    result = function()
+sqlite3.OperationalError: no such table: change_events
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "F:\GitHub\Work\api.nascrystal.ru\src\main.py", line 103, in actions_logging_middleware
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\middleware\base.py", line 168, in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\middleware\base.py", line 144, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\middleware\base.py", line 191, in __call__
+    with recv_stream, send_stream, collapse_excgroups():
+                                   ~~~~~~~~~~~~~~~~~~^^
+  File "D:\Python314\Lib\contextlib.py", line 162, in __exit__
+    self.gen.throw(value)
+    ~~~~~~~~~~~~~~^^^^^^^
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\_utils.py", line 87, in collapse_excgroups
+    raise exc
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\middleware\base.py", line 193, in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\GitHub\Work\api.nascrystal.ru\src\main.py", line 56, in success_response_wrapper
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\middleware\base.py", line 168, in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\middleware\base.py", line 144, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\middleware\base.py", line 191, in __call__
+    with recv_stream, send_stream, collapse_excgroups():
+                                   ~~~~~~~~~~~~~~~~~~^^
+  File "D:\Python314\Lib\contextlib.py", line 162, in __exit__
+    self.gen.throw(value)
+    ~~~~~~~~~~~~~~^^^^^^^
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\_utils.py", line 87, in collapse_excgroups
+    raise exc
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\middleware\base.py", line 193, in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\GitHub\Work\api.nascrystal.ru\src\main.py", line 38, in jwt_auth_middleware
+    return await call_next(request)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\middleware\base.py", line 168, in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\middleware\base.py", line 144, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\middleware\exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py", line 18, in __call__
+    await self.app(scope, receive, send)
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\routing.py", line 716, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\routing.py", line 736, in app
+    await route.handle(scope, receive, send)
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\routing.py", line 290, in handle
+    await self.app(scope, receive, send)
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\fastapi\routing.py", line 119, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\fastapi\routing.py", line 105, in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\fastapi\routing.py", line 431, in app
+    raw_response = await run_endpoint_function(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\fastapi\routing.py", line 313, in run_endpoint_function
+    return await dependant.call(**values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\GitHub\Work\api.nascrystal.ru\src\api\auth.py", line 43, in register
+    await record_change(session, "auth.user.registered", payload={"email": payload.email}, actor_uid=user.uid)
+  File "F:\GitHub\Work\api.nascrystal.ru\src\core\change_logging.py", line 38, in record_change
+    await event.save(session)
+  File "F:\GitHub\Work\api.nascrystal.ru\src\models\base.py", line 120, in save
+    await session.commit()
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\sqlalchemy\ext\asyncio\session.py", line 1000, in commit
+    await greenlet_spawn(self.sync_session.commit)
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\sqlalchemy\util\_concurrency_py3k.py", line 203, in greenlet_spawn
+    result = context.switch(value)
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\sqlalchemy\orm\session.py", line 2030, in commit
+    trans.commit(_to_root=True)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^
+  File "<string>", line 2, in commit
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\sqlalchemy\orm\state_changes.py", line 137, in _go
+    ret_value = fn(self, *arg, **kw)
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\sqlalchemy\orm\session.py", line 1311, in commit
+    self._prepare_impl()
+    ~~~~~~~~~~~~~~~~~~^^
+  File "<string>", line 2, in _prepare_impl
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\sqlalchemy\orm\state_changes.py", line 137, in _go
+    ret_value = fn(self, *arg, **kw)
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\sqlalchemy\orm\session.py", line 1286, in _prepare_impl
+    self.session.flush()
+    ~~~~~~~~~~~~~~~~~~^^
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\sqlalchemy\orm\session.py", line 4331, in flush
+    self._flush(objects)
+    ~~~~~~~~~~~^^^^^^^^^
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\sqlalchemy\orm\session.py", line 4466, in _flush
+    with util.safe_reraise():
+         ~~~~~~~~~~~~~~~~~^^
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\sqlalchemy\util\langhelpers.py", line 224, in __exit__
+    raise exc_value.with_traceback(exc_tb)
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\sqlalchemy\orm\session.py", line 4427, in _flush
+    flush_context.execute()
+    ~~~~~~~~~~~~~~~~~~~~~^^
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\sqlalchemy\orm\unitofwork.py", line 466, in execute
+    rec.execute(self)
+    ~~~~~~~~~~~^^^^^^
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\sqlalchemy\orm\unitofwork.py", line 642, in execute
+    util.preloaded.orm_persistence.save_obj(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        self.mapper,
+        ^^^^^^^^^^^^
+        uow.states_for_mapper_hierarchy(self.mapper, False, False),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        uow,
+        ^^^^
+    )
+    ^
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\sqlalchemy\orm\persistence.py", line 93, in save_obj
+    _emit_insert_statements(
+    ~~~~~~~~~~~~~~~~~~~~~~~^
+        base_mapper,
+        ^^^^^^^^^^^^
+    ...<3 lines>...
+        insert,
+        ^^^^^^^
+    )
+    ^
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\sqlalchemy\orm\persistence.py", line 1233, in _emit_insert_statements
+    result = connection.execute(
+        statement,
+        params,
+        execution_options=execution_options,
+    )
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\sqlalchemy\engine\base.py", line 1419, in execute
+    return meth(
+        self,
+        distilled_parameters,
+        execution_options or NO_OPTIONS,
+    )
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\sqlalchemy\sql\elements.py", line 527, in _execute_on_connection
+    return connection._execute_clauseelement(
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        self, distilled_params, execution_options
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\sqlalchemy\engine\base.py", line 1641, in _execute_clauseelement
+    ret = self._execute_context(
+        dialect,
+    ...<8 lines>...
+        cache_hit=cache_hit,
+    )
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\sqlalchemy\engine\base.py", line 1846, in _execute_context
+    return self._exec_single_context(
+           ~~~~~~~~~~~~~~~~~~~~~~~~~^
+        dialect, context, statement, parameters
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\sqlalchemy\engine\base.py", line 1986, in _exec_single_context
+    self._handle_dbapi_exception(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        e, str_statement, effective_parameters, cursor, context
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\sqlalchemy\engine\base.py", line 2363, in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\sqlalchemy\engine\base.py", line 1967, in _exec_single_context
+    self.dialect.do_execute(
+    ~~~~~~~~~~~~~~~~~~~~~~~^
+        cursor, str_statement, effective_parameters, context
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\sqlalchemy\engine\default.py", line 952, in do_execute
+    cursor.execute(statement, parameters)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\sqlalchemy\dialects\sqlite\aiosqlite.py", line 182, in execute
+    self._adapt_connection._handle_exception(error)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\sqlalchemy\dialects\sqlite\aiosqlite.py", line 342, in _handle_exception
+    raise error
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\sqlalchemy\dialects\sqlite\aiosqlite.py", line 164, in execute
+    self.await_(_cursor.execute(operation, parameters))
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\sqlalchemy\util\_concurrency_py3k.py", line 132, in await_only
+    return current.parent.switch(awaitable)  # type: ignore[no-any-return,attr-defined] # noqa: E501
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\sqlalchemy\util\_concurrency_py3k.py", line 196, in greenlet_spawn
+    value = await result
+            ^^^^^^^^^^^^
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\aiosqlite\cursor.py", line 40, in execute
+    await self._execute(self._cursor.execute, sql, parameters)
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\aiosqlite\cursor.py", line 32, in _execute
+    return await self._conn._execute(fn, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\aiosqlite\core.py", line 160, in _execute
+    return await future
+           ^^^^^^^^^^^^
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\aiosqlite\core.py", line 63, in _connection_worker_thread
+    result = function()
+sqlalchemy.exc.OperationalError: (sqlite3.OperationalError) no such table: change_events
+[SQL: INSERT INTO change_events (event_type, payload, actor_uid) VALUES (?, ?, ?) RETURNING id, created, updated]
+[parameters: ('auth.user.registered', '{\n  "email": "user-18887689@example.com"\n}', 'Fv4Wrb')]
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+2026-03-20 13:49:43 | INFO | method=GET path=/health status=200 duration_ms=1.07 ip=testclient user_uid=-
+2026-03-20 13:49:44 | INFO | method=POST path=/auth/register status=201 duration_ms=233.45 ip=testclient user_uid=-
+2026-03-20 13:49:44 | INFO | method=POST path=/auth/register status=201 duration_ms=219.50 ip=testclient user_uid=-
+2026-03-20 13:49:44 | INFO | method=POST path=/auth/ status=200 duration_ms=215.49 ip=testclient user_uid=-
+2026-03-20 13:49:44 | INFO | method=POST path=/api/settings/site_name status=200 duration_ms=13.33 ip=testclient user_uid=hJqe0J
+2026-03-20 13:49:44 | INFO | method=GET path=/api/changes/?locale=ru&limit=10 status=200 duration_ms=5.16 ip=testclient user_uid=hJqe0J
+2026-03-20 13:49:57 | INFO | method=GET path=/health status=200 duration_ms=1.34 ip=testclient user_uid=-
+2026-03-20 13:49:57 | INFO | method=POST path=/auth/register status=201 duration_ms=231.90 ip=testclient user_uid=-
+2026-03-20 13:49:57 | INFO | method=POST path=/auth/ status=200 duration_ms=219.14 ip=testclient user_uid=-
+2026-03-20 13:49:57 | INFO | method=POST path=/auth/refresh status=200 duration_ms=4.34 ip=testclient user_uid=-
+2026-03-20 13:49:58 | INFO | method=POST path=/auth/register status=201 duration_ms=220.50 ip=testclient user_uid=-
+2026-03-20 13:49:58 | INFO | method=POST path=/auth/ status=200 duration_ms=214.62 ip=testclient user_uid=-
+2026-03-20 13:49:58 | INFO | method=POST path=/api/settings/site_name status=200 duration_ms=12.80 ip=testclient user_uid=Wu7s20
+2026-03-20 13:49:58 | INFO | method=GET path=/api/changes/?locale=ru&limit=10 status=200 duration_ms=4.61 ip=testclient user_uid=Wu7s20
+2026-03-20 13:50:07 | INFO | method=GET path=/health status=200 duration_ms=1.29 ip=testclient user_uid=-
+2026-03-20 13:50:07 | INFO | method=POST path=/auth/register status=201 duration_ms=239.24 ip=testclient user_uid=-
+2026-03-20 13:50:07 | INFO | method=POST path=/auth/ status=200 duration_ms=221.88 ip=testclient user_uid=-
+2026-03-20 13:50:07 | INFO | method=POST path=/auth/refresh status=200 duration_ms=3.62 ip=testclient user_uid=-
+2026-03-20 13:50:08 | INFO | method=POST path=/auth/register status=201 duration_ms=222.59 ip=testclient user_uid=-
+2026-03-20 13:50:08 | INFO | method=POST path=/auth/ status=200 duration_ms=216.07 ip=testclient user_uid=-
+2026-03-20 13:50:08 | INFO | method=POST path=/api/settings/site_name status=200 duration_ms=13.41 ip=testclient user_uid=Mf1mFv
+2026-03-20 13:50:08 | INFO | method=GET path=/api/changes/?locale=ru&limit=10 status=200 duration_ms=5.01 ip=testclient user_uid=Mf1mFv
+2026-03-20 13:57:27 | INFO | method=GET path=/docs status=200 duration_ms=0.60 ip=127.0.0.1 user_uid=-
+2026-03-20 13:57:28 | INFO | method=GET path=/openapi.json status=200 duration_ms=42.89 ip=127.0.0.1 user_uid=-
+2026-03-20 14:03:25 | INFO | method=POST path=/auth/ status=404 duration_ms=13.17 ip=127.0.0.1 user_uid=-
+2026-03-20 14:03:25 | INFO | method=POST path=/auth/register status=201 duration_ms=227.22 ip=127.0.0.1 user_uid=-
+2026-03-20 14:03:25 | INFO | method=POST path=/auth/ status=200 duration_ms=227.67 ip=127.0.0.1 user_uid=-
+2026-03-20 14:03:27 | INFO | method=GET path=/api/i18n/ru status=200 duration_ms=9.93 ip=127.0.0.1 user_uid=Edkr53
+2026-03-20 14:03:27 | INFO | method=GET path=/api/settings/ status=200 duration_ms=5.19 ip=127.0.0.1 user_uid=Edkr53
+2026-03-20 14:03:27 | INFO | method=POST path=/auth/refresh status=401 duration_ms=3.10 ip=127.0.0.1 user_uid=-
+2026-03-20 14:03:31 | INFO | method=POST path=/auth/ status=404 duration_ms=3.02 ip=127.0.0.1 user_uid=-
+2026-03-20 14:04:01 | INFO | method=POST path=/auth/ status=404 duration_ms=3.02 ip=127.0.0.1 user_uid=-
+2026-03-20 14:06:12 | INFO | method=GET path=/health status=200 duration_ms=1.22 ip=testclient user_uid=-
+2026-03-20 14:06:12 | INFO | method=POST path=/auth/register status=201 duration_ms=235.48 ip=testclient user_uid=-
+2026-03-20 14:06:12 | INFO | method=POST path=/auth/login status=200 duration_ms=221.31 ip=testclient user_uid=-
+2026-03-20 14:06:12 | INFO | method=POST path=/auth/refresh status=200 duration_ms=3.41 ip=testclient user_uid=-
+2026-03-20 14:06:13 | INFO | method=POST path=/auth/register status=201 duration_ms=223.49 ip=testclient user_uid=-
+2026-03-20 14:06:13 | INFO | method=POST path=/auth/login status=200 duration_ms=216.49 ip=testclient user_uid=-
+2026-03-20 14:06:13 | INFO | method=POST path=/api/settings/site_name status=200 duration_ms=14.05 ip=testclient user_uid=cXBRxL
+2026-03-20 14:06:13 | INFO | method=GET path=/api/changes/?locale=ru&limit=10 status=200 duration_ms=4.99 ip=testclient user_uid=cXBRxL
+2026-03-20 14:06:29 | INFO | method=POST path=/auth/login status=404 duration_ms=16.63 ip=127.0.0.1 user_uid=-
+2026-03-20 14:06:30 | INFO | method=POST path=/auth/register status=201 duration_ms=223.83 ip=127.0.0.1 user_uid=-
+2026-03-20 14:06:30 | INFO | method=POST path=/auth/login status=200 duration_ms=215.80 ip=127.0.0.1 user_uid=-
+2026-03-20 14:06:30 | INFO | method=POST path=/auth/login status=200 duration_ms=225.75 ip=127.0.0.1 user_uid=-
+2026-03-20 14:06:30 | INFO | method=GET path=/api/i18n/ru status=200 duration_ms=8.15 ip=127.0.0.1 user_uid=C9bI9H
+2026-03-20 14:06:30 | INFO | method=GET path=/api/settings/ status=200 duration_ms=5.11 ip=127.0.0.1 user_uid=C9bI9H
+2026-03-20 14:06:33 | INFO | method=POST path=/auth/login status=404 duration_ms=3.04 ip=127.0.0.1 user_uid=-
+2026-03-20 14:08:02 | INFO | method=POST path=/auth/ status=200 duration_ms=219.66 ip=127.0.0.1 user_uid=-
+2026-03-20 14:08:17 | INFO | method=POST path=/auth/ status=404 duration_ms=16.51 ip=127.0.0.1 user_uid=-
+2026-03-20 14:08:43 | INFO | method=POST path=/auth/ status=404 duration_ms=13.40 ip=127.0.0.1 user_uid=-
+2026-03-20 14:10:11 | INFO | method=POST path=/api/settings/site_name status=200 duration_ms=13.24 ip=testclient user_uid=E1bTQx
+2026-03-20 14:10:11 | INFO | method=GET path=/api/changes/?locale=ru&limit=10 status=200 duration_ms=5.25 ip=testclient user_uid=E1bTQx
+2026-03-20 14:14:56 | INFO | method=POST path=/api/settings/site_name status=200 duration_ms=15.20 ip=testclient user_uid=tzP2C5
+2026-03-20 14:14:56 | INFO | method=GET path=/api/changes/?locale=ru&limit=10 status=200 duration_ms=5.52 ip=testclient user_uid=tzP2C5
+2026-03-24 10:31:05 | INFO | method=GET path=/api/i18n/ru status=200 duration_ms=9.36 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 10:31:05 | INFO | method=GET path=/api/settings/ status=200 duration_ms=6.23 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 10:31:05 | INFO | method=GET path=/api/static/home/ru status=404 duration_ms=6.94 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 10:31:06 | INFO | method=GET path=/api/i18n/ru status=200 duration_ms=4.84 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 10:31:06 | INFO | method=GET path=/api/settings/ status=200 duration_ms=3.48 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 10:31:08 | INFO | method=GET path=/api/i18n/ru status=200 duration_ms=5.86 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 10:33:04 | INFO | method=GET path=/api/i18n/ru status=200 duration_ms=11.34 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 10:33:04 | INFO | method=GET path=/api/settings/ status=200 duration_ms=5.06 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 10:33:04 | INFO | method=GET path=/api/static/home/ru status=200 duration_ms=16.75 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 10:33:06 | INFO | method=GET path=/api/i18n/ru status=200 duration_ms=9.48 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 10:35:49 | INFO | method=GET path=/api/i18n/ru status=200 duration_ms=9.99 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 10:35:49 | INFO | method=GET path=/api/settings/ status=200 duration_ms=4.39 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 10:35:49 | INFO | method=GET path=/api/static/home/ru status=200 duration_ms=15.43 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 10:35:50 | INFO | method=GET path=/api/i18n/ru status=200 duration_ms=7.25 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 10:35:59 | INFO | method=GET path=/api/i18n/ru status=200 duration_ms=9.67 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 10:35:59 | INFO | method=GET path=/api/settings/ status=200 duration_ms=5.73 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 10:36:12 | INFO | method=GET path=/api/static/home/ru status=200 duration_ms=16.75 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 10:36:13 | INFO | method=GET path=/api/static/?locale=ru status=200 duration_ms=13.21 ip=127.0.0.1 user_uid=JP9DJN
+2026-03-24 10:38:13 | INFO | method=GET path=/api/i18n/ru status=200 duration_ms=7.41 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 10:38:13 | INFO | method=GET path=/api/settings/ status=200 duration_ms=6.01 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 10:38:36 | INFO | method=GET path=/api/i18n/ru status=200 duration_ms=8.81 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 10:38:36 | INFO | method=GET path=/api/settings/ status=200 duration_ms=5.39 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 10:38:58 | INFO | method=GET path=/api/i18n/ru status=200 duration_ms=6.76 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 10:38:58 | INFO | method=GET path=/api/settings/ status=200 duration_ms=3.79 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 10:42:08 | INFO | method=GET path=/api/i18n/ru status=200 duration_ms=17.52 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 10:42:08 | INFO | method=GET path=/api/settings/ status=200 duration_ms=7.04 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 10:49:32 | INFO | method=GET path=/api/i18n/ru status=200 duration_ms=10.11 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 10:49:32 | INFO | method=GET path=/api/settings/ status=200 duration_ms=6.39 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 11:41:32 | INFO | method=POST path=/api/settings/site_name status=200 duration_ms=15.55 ip=testclient user_uid=xaKMfd
+2026-03-24 11:41:32 | INFO | method=GET path=/api/changes/?locale=ru&limit=10 status=200 duration_ms=6.36 ip=testclient user_uid=xaKMfd
+2026-03-24 11:41:33 | INFO | method=POST path=/api/category status=200 duration_ms=32.12 ip=testclient user_uid=f7eh6e
+2026-03-24 11:41:33 | INFO | method=POST path=/api/category status=200 duration_ms=18.40 ip=testclient user_uid=f7eh6e
+2026-03-24 11:41:33 | INFO | method=POST path=/api/color status=200 duration_ms=15.34 ip=testclient user_uid=f7eh6e
+2026-03-24 11:41:33 | INFO | method=POST path=/api/size status=200 duration_ms=14.13 ip=testclient user_uid=f7eh6e
+2026-03-24 11:41:33 | INFO | method=GET path=/api/categories/ru status=200 duration_ms=9.22 ip=testclient user_uid=f7eh6e
+2026-03-24 11:41:33 | INFO | method=GET path=/api/category/D1gAieqN/en status=200 duration_ms=8.97 ip=testclient user_uid=f7eh6e
+2026-03-24 11:41:33 | INFO | method=GET path=/api/warehouse/specs?locale=ru status=200 duration_ms=13.05 ip=testclient user_uid=f7eh6e
+2026-03-24 12:03:40 | INFO | method=GET path=/api/static/?locale=ru status=200 duration_ms=43.40 ip=127.0.0.1 user_uid=JP9DJN
+2026-03-24 12:03:44 | INFO | method=GET path=/api/i18n/ru status=200 duration_ms=16.67 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 12:03:44 | INFO | method=GET path=/api/settings/ status=200 duration_ms=7.42 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 12:17:00 | INFO | method=GET path=/api/i18n/ru status=200 duration_ms=15.76 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 12:17:00 | INFO | method=GET path=/api/settings/ status=200 duration_ms=6.41 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 12:19:53 | INFO | method=GET path=/api/i18n/ru status=200 duration_ms=7.51 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 12:19:53 | INFO | method=GET path=/api/settings/ status=200 duration_ms=6.14 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 12:21:30 | INFO | method=GET path=/api/warehouse/specs status=422 duration_ms=9.53 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 12:21:30 | INFO | method=GET path=/api/warehouse/specs status=422 duration_ms=5.32 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 12:21:31 | INFO | method=GET path=/api/i18n/ru status=200 duration_ms=20.05 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 12:21:31 | INFO | method=GET path=/api/settings/ status=200 duration_ms=9.48 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 12:21:31 | INFO | method=GET path=/api/warehouse/specs status=422 duration_ms=3.11 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 12:21:31 | INFO | method=GET path=/api/warehouse/specs status=422 duration_ms=5.17 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 12:24:03 | INFO | method=GET path=/api/i18n/ru status=200 duration_ms=30.77 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 12:24:03 | INFO | method=GET path=/api/settings/ status=200 duration_ms=7.17 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 12:24:03 | INFO | method=GET path=/api/warehouse/specs status=422 duration_ms=3.84 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 12:24:03 | INFO | method=GET path=/api/warehouse/specs status=422 duration_ms=3.72 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 12:25:53 | INFO | method=GET path=/api/i18n/ru status=200 duration_ms=8.21 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 12:25:53 | INFO | method=GET path=/api/settings/ status=200 duration_ms=6.31 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 12:25:53 | ERROR | method=GET path=/api/warehouse/specs?locale=ru status=500 duration_ms=4.52 ip=127.0.0.1 user_uid=FAf7Y2
+  + Exception Group Traceback (most recent call last):
+  |   File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\_utils.py", line 81, in collapse_excgroups
+  |     yield
+  |   File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\middleware\base.py", line 192, in __call__
+  |     async with anyio.create_task_group() as task_group:
+  |                ~~~~~~~~~~~~~~~~~~~~~~~^^
+  |   File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\anyio\_backends\_asyncio.py", line 783, in __aexit__
+  |     raise BaseExceptionGroup(
+  |         "unhandled errors in a TaskGroup", self._exceptions
+  |     ) from None
+  | ExceptionGroup: unhandled errors in a TaskGroup (1 sub-exception)
+  +-+---------------- 1 ----------------
+    | Traceback (most recent call last):
+    |   File "F:\GitHub\Work\api.nascrystal.ru\src\main.py", line 107, in actions_logging_middleware
+    |     response = await call_next(request)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\middleware\base.py", line 168, in call_next
+    |     raise app_exc from app_exc.__cause__ or app_exc.__context__
+    |   File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\middleware\base.py", line 144, in coro
+    |     await self.app(scope, receive_or_disconnect, send_no_error)
+    |   File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\middleware\base.py", line 191, in __call__
+    |     with recv_stream, send_stream, collapse_excgroups():
+    |                                    ~~~~~~~~~~~~~~~~~~^^
+    |   File "D:\Python314\Lib\contextlib.py", line 162, in __exit__
+    |     self.gen.throw(value)
+    |     ~~~~~~~~~~~~~~^^^^^^^
+    |   File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\_utils.py", line 87, in collapse_excgroups
+    |     raise exc
+    |   File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\middleware\base.py", line 193, in __call__
+    |     response = await self.dispatch_func(request, call_next)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "F:\GitHub\Work\api.nascrystal.ru\src\main.py", line 57, in success_response_wrapper
+    |     response = await call_next(request)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\middleware\base.py", line 168, in call_next
+    |     raise app_exc from app_exc.__cause__ or app_exc.__context__
+    |   File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\middleware\base.py", line 144, in coro
+    |     await self.app(scope, receive_or_disconnect, send_no_error)
+    |   File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\middleware\base.py", line 191, in __call__
+    |     with recv_stream, send_stream, collapse_excgroups():
+    |                                    ~~~~~~~~~~~~~~~~~~^^
+    |   File "D:\Python314\Lib\contextlib.py", line 162, in __exit__
+    |     self.gen.throw(value)
+    |     ~~~~~~~~~~~~~~^^^^^^^
+    |   File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\_utils.py", line 87, in collapse_excgroups
+    |     raise exc
+    |   File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\middleware\base.py", line 193, in __call__
+    |     response = await self.dispatch_func(request, call_next)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "F:\GitHub\Work\api.nascrystal.ru\src\main.py", line 52, in jwt_auth_middleware
+    |     return await call_next(request)
+    |            ^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\middleware\base.py", line 168, in call_next
+    |     raise app_exc from app_exc.__cause__ or app_exc.__context__
+    |   File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\middleware\base.py", line 144, in coro
+    |     await self.app(scope, receive_or_disconnect, send_no_error)
+    |   File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\middleware\exceptions.py", line 63, in __call__
+    |     await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+    |   File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    |     raise exc
+    |   File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    |     await app(scope, receive, sender)
+    |   File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py", line 18, in __call__
+    |     await self.app(scope, receive, send)
+    |   File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\routing.py", line 716, in __call__
+    |     await self.middleware_stack(scope, receive, send)
+    |   File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\routing.py", line 736, in app
+    |     await route.handle(scope, receive, send)
+    |   File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\routing.py", line 290, in handle
+    |     await self.app(scope, receive, send)
+    |   File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\fastapi\routing.py", line 119, in app
+    |     await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+    |   File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    |     raise exc
+    |   File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    |     await app(scope, receive, sender)
+    |   File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\fastapi\routing.py", line 105, in app
+    |     response = await f(request)
+    |                ^^^^^^^^^^^^^^^^
+    |   File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\fastapi\routing.py", line 461, in app
+    |     content = await serialize_response(
+    |               ^^^^^^^^^^^^^^^^^^^^^^^^^
+    |     ...<11 lines>...
+    |     )
+    |     ^
+    |   File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\fastapi\routing.py", line 285, in serialize_response
+    |     raise ResponseValidationError(
+    |     ...<3 lines>...
+    |     )
+    | fastapi.exceptions.ResponseValidationError: 3 validation errors:
+    |   {'type': 'missing', 'loc': ('response', 'categories'), 'msg': 'Field required', 'input': {}}
+    |   {'type': 'missing', 'loc': ('response', 'colors'), 'msg': 'Field required', 'input': {}}
+    |   {'type': 'missing', 'loc': ('response', 'sizes'), 'msg': 'Field required', 'input': {}}
+    | 
+    |   File "F:\GitHub\Work\api.nascrystal.ru\src\api\catalog.py", line 189, in get_warehouse_specs
+    |     GET /api/warehouse/specs
+    +------------------------------------
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "F:\GitHub\Work\api.nascrystal.ru\src\main.py", line 107, in actions_logging_middleware
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\middleware\base.py", line 168, in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\middleware\base.py", line 144, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\middleware\base.py", line 191, in __call__
+    with recv_stream, send_stream, collapse_excgroups():
+                                   ~~~~~~~~~~~~~~~~~~^^
+  File "D:\Python314\Lib\contextlib.py", line 162, in __exit__
+    self.gen.throw(value)
+    ~~~~~~~~~~~~~~^^^^^^^
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\_utils.py", line 87, in collapse_excgroups
+    raise exc
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\middleware\base.py", line 193, in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\GitHub\Work\api.nascrystal.ru\src\main.py", line 57, in success_response_wrapper
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\middleware\base.py", line 168, in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\middleware\base.py", line 144, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\middleware\base.py", line 191, in __call__
+    with recv_stream, send_stream, collapse_excgroups():
+                                   ~~~~~~~~~~~~~~~~~~^^
+  File "D:\Python314\Lib\contextlib.py", line 162, in __exit__
+    self.gen.throw(value)
+    ~~~~~~~~~~~~~~^^^^^^^
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\_utils.py", line 87, in collapse_excgroups
+    raise exc
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\middleware\base.py", line 193, in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\GitHub\Work\api.nascrystal.ru\src\main.py", line 52, in jwt_auth_middleware
+    return await call_next(request)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\middleware\base.py", line 168, in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\middleware\base.py", line 144, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\middleware\exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py", line 18, in __call__
+    await self.app(scope, receive, send)
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\routing.py", line 716, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\routing.py", line 736, in app
+    await route.handle(scope, receive, send)
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\routing.py", line 290, in handle
+    await self.app(scope, receive, send)
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\fastapi\routing.py", line 119, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\fastapi\routing.py", line 105, in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\fastapi\routing.py", line 461, in app
+    content = await serialize_response(
+              ^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<11 lines>...
+    )
+    ^
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\fastapi\routing.py", line 285, in serialize_response
+    raise ResponseValidationError(
+    ...<3 lines>...
+    )
+fastapi.exceptions.ResponseValidationError: 3 validation errors:
+  {'type': 'missing', 'loc': ('response', 'categories'), 'msg': 'Field required', 'input': {}}
+  {'type': 'missing', 'loc': ('response', 'colors'), 'msg': 'Field required', 'input': {}}
+  {'type': 'missing', 'loc': ('response', 'sizes'), 'msg': 'Field required', 'input': {}}
+
+  File "F:\GitHub\Work\api.nascrystal.ru\src\api\catalog.py", line 189, in get_warehouse_specs
+    GET /api/warehouse/specs
+2026-03-24 12:25:53 | ERROR | method=GET path=/api/warehouse/specs?locale=ru status=500 duration_ms=3.47 ip=127.0.0.1 user_uid=FAf7Y2
+  + Exception Group Traceback (most recent call last):
+  |   File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\_utils.py", line 81, in collapse_excgroups
+  |     yield
+  |   File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\middleware\base.py", line 192, in __call__
+  |     async with anyio.create_task_group() as task_group:
+  |                ~~~~~~~~~~~~~~~~~~~~~~~^^
+  |   File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\anyio\_backends\_asyncio.py", line 783, in __aexit__
+  |     raise BaseExceptionGroup(
+  |         "unhandled errors in a TaskGroup", self._exceptions
+  |     ) from None
+  | ExceptionGroup: unhandled errors in a TaskGroup (1 sub-exception)
+  +-+---------------- 1 ----------------
+    | Traceback (most recent call last):
+    |   File "F:\GitHub\Work\api.nascrystal.ru\src\main.py", line 107, in actions_logging_middleware
+    |     response = await call_next(request)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\middleware\base.py", line 168, in call_next
+    |     raise app_exc from app_exc.__cause__ or app_exc.__context__
+    |   File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\middleware\base.py", line 144, in coro
+    |     await self.app(scope, receive_or_disconnect, send_no_error)
+    |   File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\middleware\base.py", line 191, in __call__
+    |     with recv_stream, send_stream, collapse_excgroups():
+    |                                    ~~~~~~~~~~~~~~~~~~^^
+    |   File "D:\Python314\Lib\contextlib.py", line 162, in __exit__
+    |     self.gen.throw(value)
+    |     ~~~~~~~~~~~~~~^^^^^^^
+    |   File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\_utils.py", line 87, in collapse_excgroups
+    |     raise exc
+    |   File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\middleware\base.py", line 193, in __call__
+    |     response = await self.dispatch_func(request, call_next)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "F:\GitHub\Work\api.nascrystal.ru\src\main.py", line 57, in success_response_wrapper
+    |     response = await call_next(request)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\middleware\base.py", line 168, in call_next
+    |     raise app_exc from app_exc.__cause__ or app_exc.__context__
+    |   File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\middleware\base.py", line 144, in coro
+    |     await self.app(scope, receive_or_disconnect, send_no_error)
+    |   File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\middleware\base.py", line 191, in __call__
+    |     with recv_stream, send_stream, collapse_excgroups():
+    |                                    ~~~~~~~~~~~~~~~~~~^^
+    |   File "D:\Python314\Lib\contextlib.py", line 162, in __exit__
+    |     self.gen.throw(value)
+    |     ~~~~~~~~~~~~~~^^^^^^^
+    |   File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\_utils.py", line 87, in collapse_excgroups
+    |     raise exc
+    |   File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\middleware\base.py", line 193, in __call__
+    |     response = await self.dispatch_func(request, call_next)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "F:\GitHub\Work\api.nascrystal.ru\src\main.py", line 52, in jwt_auth_middleware
+    |     return await call_next(request)
+    |            ^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\middleware\base.py", line 168, in call_next
+    |     raise app_exc from app_exc.__cause__ or app_exc.__context__
+    |   File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\middleware\base.py", line 144, in coro
+    |     await self.app(scope, receive_or_disconnect, send_no_error)
+    |   File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\middleware\exceptions.py", line 63, in __call__
+    |     await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+    |   File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    |     raise exc
+    |   File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    |     await app(scope, receive, sender)
+    |   File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py", line 18, in __call__
+    |     await self.app(scope, receive, send)
+    |   File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\routing.py", line 716, in __call__
+    |     await self.middleware_stack(scope, receive, send)
+    |   File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\routing.py", line 736, in app
+    |     await route.handle(scope, receive, send)
+    |   File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\routing.py", line 290, in handle
+    |     await self.app(scope, receive, send)
+    |   File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\fastapi\routing.py", line 119, in app
+    |     await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+    |   File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    |     raise exc
+    |   File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    |     await app(scope, receive, sender)
+    |   File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\fastapi\routing.py", line 105, in app
+    |     response = await f(request)
+    |                ^^^^^^^^^^^^^^^^
+    |   File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\fastapi\routing.py", line 461, in app
+    |     content = await serialize_response(
+    |               ^^^^^^^^^^^^^^^^^^^^^^^^^
+    |     ...<11 lines>...
+    |     )
+    |     ^
+    |   File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\fastapi\routing.py", line 285, in serialize_response
+    |     raise ResponseValidationError(
+    |     ...<3 lines>...
+    |     )
+    | fastapi.exceptions.ResponseValidationError: 3 validation errors:
+    |   {'type': 'missing', 'loc': ('response', 'categories'), 'msg': 'Field required', 'input': {}}
+    |   {'type': 'missing', 'loc': ('response', 'colors'), 'msg': 'Field required', 'input': {}}
+    |   {'type': 'missing', 'loc': ('response', 'sizes'), 'msg': 'Field required', 'input': {}}
+    | 
+    |   File "F:\GitHub\Work\api.nascrystal.ru\src\api\catalog.py", line 189, in get_warehouse_specs
+    |     GET /api/warehouse/specs
+    +------------------------------------
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "F:\GitHub\Work\api.nascrystal.ru\src\main.py", line 107, in actions_logging_middleware
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\middleware\base.py", line 168, in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\middleware\base.py", line 144, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\middleware\base.py", line 191, in __call__
+    with recv_stream, send_stream, collapse_excgroups():
+                                   ~~~~~~~~~~~~~~~~~~^^
+  File "D:\Python314\Lib\contextlib.py", line 162, in __exit__
+    self.gen.throw(value)
+    ~~~~~~~~~~~~~~^^^^^^^
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\_utils.py", line 87, in collapse_excgroups
+    raise exc
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\middleware\base.py", line 193, in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\GitHub\Work\api.nascrystal.ru\src\main.py", line 57, in success_response_wrapper
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\middleware\base.py", line 168, in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\middleware\base.py", line 144, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\middleware\base.py", line 191, in __call__
+    with recv_stream, send_stream, collapse_excgroups():
+                                   ~~~~~~~~~~~~~~~~~~^^
+  File "D:\Python314\Lib\contextlib.py", line 162, in __exit__
+    self.gen.throw(value)
+    ~~~~~~~~~~~~~~^^^^^^^
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\_utils.py", line 87, in collapse_excgroups
+    raise exc
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\middleware\base.py", line 193, in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\GitHub\Work\api.nascrystal.ru\src\main.py", line 52, in jwt_auth_middleware
+    return await call_next(request)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\middleware\base.py", line 168, in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\middleware\base.py", line 144, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\middleware\exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py", line 18, in __call__
+    await self.app(scope, receive, send)
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\routing.py", line 716, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\routing.py", line 736, in app
+    await route.handle(scope, receive, send)
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\routing.py", line 290, in handle
+    await self.app(scope, receive, send)
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\fastapi\routing.py", line 119, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\fastapi\routing.py", line 105, in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\fastapi\routing.py", line 461, in app
+    content = await serialize_response(
+              ^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<11 lines>...
+    )
+    ^
+  File "F:\GitHub\Work\api.nascrystal.ru\.venv\Lib\site-packages\fastapi\routing.py", line 285, in serialize_response
+    raise ResponseValidationError(
+    ...<3 lines>...
+    )
+fastapi.exceptions.ResponseValidationError: 3 validation errors:
+  {'type': 'missing', 'loc': ('response', 'categories'), 'msg': 'Field required', 'input': {}}
+  {'type': 'missing', 'loc': ('response', 'colors'), 'msg': 'Field required', 'input': {}}
+  {'type': 'missing', 'loc': ('response', 'sizes'), 'msg': 'Field required', 'input': {}}
+
+  File "F:\GitHub\Work\api.nascrystal.ru\src\api\catalog.py", line 189, in get_warehouse_specs
+    GET /api/warehouse/specs
+2026-03-24 12:26:19 | INFO | method=GET path=/api/i18n/ru status=200 duration_ms=35.15 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 12:26:19 | INFO | method=GET path=/api/settings/ status=200 duration_ms=9.28 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 12:26:19 | INFO | method=GET path=/api/warehouse/specs?locale=ru status=200 duration_ms=11.64 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 12:35:35 | INFO | method=GET path=/api/warehouse/specs?locale=ru status=200 duration_ms=12.15 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 12:35:38 | INFO | method=GET path=/api/i18n/ru status=200 duration_ms=9.75 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 12:35:38 | INFO | method=GET path=/api/settings/ status=200 duration_ms=3.17 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 12:35:38 | INFO | method=GET path=/api/warehouse/specs?locale=ru status=200 duration_ms=6.73 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 12:37:39 | INFO | method=GET path=/api/i18n/ru status=200 duration_ms=10.58 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 12:37:39 | INFO | method=GET path=/api/settings/ status=200 duration_ms=4.50 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 12:37:39 | INFO | method=GET path=/api/static/?locale=ru status=401 duration_ms=0.46 ip=127.0.0.1 user_uid=-
+2026-03-24 12:37:39 | INFO | method=GET path=/api/static/?locale=ru status=401 duration_ms=0.31 ip=127.0.0.1 user_uid=-
+2026-03-24 12:38:45 | INFO | method=GET path=/api/i18n/ru status=200 duration_ms=6.29 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 12:38:45 | INFO | method=GET path=/api/settings/ status=200 duration_ms=3.33 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 12:38:45 | INFO | method=GET path=/api/static/?locale=ru status=200 duration_ms=11.28 ip=127.0.0.1 user_uid=JP9DJN
+2026-03-24 12:39:07 | INFO | method=GET path=/api/i18n/ru status=200 duration_ms=9.39 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 12:39:07 | INFO | method=GET path=/api/settings/ status=200 duration_ms=6.90 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 12:39:08 | INFO | method=GET path=/api/warehouse/specs?locale=ru status=200 duration_ms=7.73 ip=127.0.0.1 user_uid=JP9DJN
+2026-03-24 12:40:34 | INFO | method=GET path=/api/warehouse/specs?locale=ru status=200 duration_ms=9.08 ip=127.0.0.1 user_uid=JP9DJN
+2026-03-24 12:53:40 | INFO | method=GET path=/api/i18n/ru status=200 duration_ms=9.14 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 12:53:40 | INFO | method=GET path=/api/settings/ status=200 duration_ms=5.79 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 12:53:41 | INFO | method=GET path=/api/warehouse/specs?locale=ru status=200 duration_ms=9.17 ip=127.0.0.1 user_uid=JP9DJN
+2026-03-24 12:55:42 | INFO | method=GET path=/api/static/?locale=ru status=200 duration_ms=14.18 ip=127.0.0.1 user_uid=JP9DJN
+2026-03-24 12:55:44 | INFO | method=GET path=/api/warehouse/specs?locale=ru status=200 duration_ms=10.92 ip=127.0.0.1 user_uid=JP9DJN
+2026-03-24 12:58:08 | INFO | method=GET path=/api/warehouse/specs?locale=ru status=200 duration_ms=13.45 ip=127.0.0.1 user_uid=JP9DJN
+2026-03-24 13:01:05 | INFO | method=GET path=/api/i18n/ru status=200 duration_ms=6.78 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 13:01:05 | INFO | method=GET path=/api/settings/ status=200 duration_ms=3.36 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 13:01:06 | INFO | method=GET path=/api/warehouse/specs?locale=ru status=200 duration_ms=6.89 ip=127.0.0.1 user_uid=JP9DJN
+2026-03-24 13:01:11 | INFO | method=GET path=/api/i18n/ru status=200 duration_ms=13.22 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 13:01:11 | INFO | method=GET path=/api/settings/ status=200 duration_ms=8.84 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 13:01:12 | INFO | method=GET path=/api/warehouse/specs?locale=ru status=200 duration_ms=12.18 ip=127.0.0.1 user_uid=JP9DJN
+2026-03-24 13:05:42 | INFO | method=GET path=/api/static/?locale=ru status=200 duration_ms=15.68 ip=127.0.0.1 user_uid=JP9DJN
+2026-03-24 13:05:44 | INFO | method=GET path=/api/static/home/ru status=200 duration_ms=26.08 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 13:06:06 | INFO | method=GET path=/api/static/?locale=ru status=200 duration_ms=12.62 ip=127.0.0.1 user_uid=JP9DJN
+2026-03-24 13:06:07 | INFO | method=GET path=/api/warehouse/specs?locale=ru status=200 duration_ms=14.82 ip=127.0.0.1 user_uid=JP9DJN
+2026-03-24 13:07:28 | INFO | method=GET path=/api/i18n/ru status=200 duration_ms=9.91 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 13:07:28 | INFO | method=GET path=/api/settings/ status=200 duration_ms=4.44 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 13:07:28 | INFO | method=GET path=/api/static/home/ru status=200 duration_ms=11.80 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 13:09:20 | INFO | method=GET path=/api/i18n/ru status=200 duration_ms=8.74 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 13:09:20 | INFO | method=GET path=/api/settings/ status=200 duration_ms=5.22 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 13:09:20 | INFO | method=GET path=/api/warehouse/specs?locale=ru status=200 duration_ms=7.79 ip=127.0.0.1 user_uid=JP9DJN
+2026-03-24 13:09:45 | INFO | method=GET path=/api/i18n/ru status=200 duration_ms=9.55 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 13:09:45 | INFO | method=GET path=/api/settings/ status=200 duration_ms=6.58 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 13:09:45 | INFO | method=GET path=/api/warehouse/specs?locale=ru status=200 duration_ms=10.20 ip=127.0.0.1 user_uid=JP9DJN
+2026-03-24 13:11:48 | INFO | method=GET path=/api/warehouse/specs?locale=ru status=200 duration_ms=12.05 ip=127.0.0.1 user_uid=JP9DJN
+2026-03-24 13:13:51 | INFO | method=GET path=/api/i18n/ru status=200 duration_ms=12.54 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 13:13:51 | INFO | method=GET path=/api/settings/ status=200 duration_ms=4.11 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 13:13:51 | INFO | method=GET path=/api/warehouse/specs?locale=ru status=200 duration_ms=6.45 ip=127.0.0.1 user_uid=JP9DJN
+2026-03-24 13:14:25 | INFO | method=GET path=/api/warehouse/specs?locale=ru status=200 duration_ms=12.17 ip=127.0.0.1 user_uid=JP9DJN
+2026-03-24 16:35:22 | INFO | method=GET path=/api/i18n/ru status=200 duration_ms=11.39 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 16:35:22 | INFO | method=GET path=/api/settings/ status=200 duration_ms=4.21 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 16:35:22 | INFO | method=GET path=/api/warehouse/specs?locale=ru status=200 duration_ms=9.38 ip=127.0.0.1 user_uid=JP9DJN
+2026-03-24 16:38:46 | INFO | method=GET path=/api/i18n/ru status=200 duration_ms=5.98 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 16:38:46 | INFO | method=GET path=/api/settings/ status=200 duration_ms=3.02 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 16:38:46 | INFO | method=GET path=/api/warehouse/specs?locale=ru status=200 duration_ms=4.77 ip=127.0.0.1 user_uid=JP9DJN
+2026-03-24 16:45:30 | INFO | method=GET path=/api/warehouse/specs?locale=ru status=200 duration_ms=7.26 ip=127.0.0.1 user_uid=JP9DJN
+2026-03-24 16:46:00 | INFO | method=GET path=/api/i18n/ru status=200 duration_ms=5.69 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 16:46:00 | INFO | method=GET path=/api/settings/ status=200 duration_ms=3.30 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 16:46:00 | INFO | method=GET path=/api/warehouse/specs?locale=ru status=200 duration_ms=5.12 ip=127.0.0.1 user_uid=JP9DJN
+2026-03-24 16:46:25 | INFO | method=GET path=/api/i18n/ru status=200 duration_ms=5.04 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 16:46:25 | INFO | method=GET path=/api/settings/ status=200 duration_ms=3.19 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 16:46:25 | INFO | method=GET path=/api/warehouse/specs?locale=ru status=200 duration_ms=5.12 ip=127.0.0.1 user_uid=JP9DJN
+2026-03-24 17:33:50 | INFO | method=GET path=/api/warehouse/specs?locale=ru status=200 duration_ms=11.58 ip=127.0.0.1 user_uid=JP9DJN
+2026-03-24 17:48:11 | INFO | method=GET path=/api/warehouse/specs?locale=ru status=200 duration_ms=8.02 ip=127.0.0.1 user_uid=JP9DJN
+2026-03-24 17:52:30 | INFO | method=POST path=/api/settings/site_name status=200 duration_ms=16.68 ip=testclient user_uid=BJwBK1
+2026-03-24 17:52:30 | INFO | method=GET path=/api/changes/?locale=ru&limit=10 status=200 duration_ms=7.09 ip=testclient user_uid=BJwBK1
+2026-03-24 17:52:31 | INFO | method=POST path=/api/category status=200 duration_ms=24.92 ip=testclient user_uid=4Rs6td
+2026-03-24 17:52:31 | INFO | method=POST path=/api/category status=200 duration_ms=16.43 ip=testclient user_uid=4Rs6td
+2026-03-24 17:52:31 | INFO | method=POST path=/api/color status=200 duration_ms=12.57 ip=testclient user_uid=4Rs6td
+2026-03-24 17:52:31 | INFO | method=POST path=/api/size status=200 duration_ms=12.43 ip=testclient user_uid=4Rs6td
+2026-03-24 17:52:31 | INFO | method=GET path=/api/categories/ru status=200 duration_ms=8.03 ip=testclient user_uid=4Rs6td
+2026-03-24 17:52:31 | INFO | method=GET path=/api/category/wA2xhMi3/en status=200 duration_ms=7.21 ip=testclient user_uid=4Rs6td
+2026-03-24 17:52:31 | INFO | method=GET path=/api/warehouse/specs?locale=ru status=200 duration_ms=10.35 ip=testclient user_uid=4Rs6td
+2026-03-24 17:52:32 | INFO | method=POST path=/api/category status=200 duration_ms=20.72 ip=testclient user_uid=ltJjTa
+2026-03-24 17:52:32 | INFO | method=POST path=/api/category status=200 duration_ms=16.99 ip=testclient user_uid=ltJjTa
+2026-03-24 17:52:32 | INFO | method=POST path=/api/color status=200 duration_ms=11.16 ip=testclient user_uid=ltJjTa
+2026-03-24 17:52:32 | INFO | method=POST path=/api/size status=200 duration_ms=11.42 ip=testclient user_uid=ltJjTa
+2026-03-24 17:52:32 | INFO | method=PUT path=/api/categories status=200 duration_ms=56.50 ip=testclient user_uid=ltJjTa
+2026-03-24 17:52:32 | INFO | method=PUT path=/api/colors status=200 duration_ms=12.78 ip=testclient user_uid=ltJjTa
+2026-03-24 17:52:32 | INFO | method=PUT path=/api/sizes status=200 duration_ms=13.12 ip=testclient user_uid=ltJjTa
+2026-03-24 17:52:32 | INFO | method=GET path=/api/category/TlTu4W24/ru status=200 duration_ms=5.53 ip=testclient user_uid=ltJjTa
+2026-03-24 17:52:32 | INFO | method=GET path=/api/category/TlTu4W24/en status=200 duration_ms=5.96 ip=testclient user_uid=ltJjTa
+2026-03-24 17:52:32 | INFO | method=GET path=/api/colors status=200 duration_ms=4.58 ip=testclient user_uid=ltJjTa
+2026-03-24 17:52:32 | INFO | method=GET path=/api/sizes status=200 duration_ms=4.52 ip=testclient user_uid=ltJjTa
+2026-03-24 17:53:01 | INFO | method=GET path=/api/i18n/ru status=200 duration_ms=29.93 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 17:53:01 | INFO | method=GET path=/api/settings/ status=200 duration_ms=9.95 ip=127.0.0.1 user_uid=FAf7Y2
+2026-03-24 17:53:01 | INFO | method=GET path=/api/warehouse/specs?locale=ru status=200 duration_ms=12.10 ip=127.0.0.1 user_uid=JP9DJN
+2026-03-24 17:54:56 | INFO | method=GET path=/api/warehouse/specs?locale=ru status=200 duration_ms=9.47 ip=127.0.0.1 user_uid=JP9DJN
+2026-03-24 17:55:09 | INFO | method=GET path=/api/warehouse/specs?locale=ru status=200 duration_ms=10.62 ip=127.0.0.1 user_uid=JP9DJN
+2026-03-24 18:02:54 | INFO | method=GET path=/api/warehouse/specs?locale=ru status=200 duration_ms=14.93 ip=127.0.0.1 user_uid=JP9DJN
+2026-03-24 18:03:27 | INFO | method=GET path=/api/warehouse/specs?locale=ru status=200 duration_ms=6.54 ip=127.0.0.1 user_uid=JP9DJN
+2026-03-24 18:03:39 | INFO | method=POST path=/api/category status=200 duration_ms=25.46 ip=127.0.0.1 user_uid=JP9DJN
+2026-03-24 18:03:39 | INFO | method=GET path=/api/warehouse/specs?locale=ru status=200 duration_ms=10.64 ip=127.0.0.1 user_uid=JP9DJN
+2026-03-24 18:05:27 | INFO | method=POST path=/api/category status=200 duration_ms=22.79 ip=127.0.0.1 user_uid=JP9DJN
+2026-03-24 18:05:27 | INFO | method=GET path=/api/warehouse/specs?locale=ru status=200 duration_ms=10.93 ip=127.0.0.1 user_uid=JP9DJN
+2026-03-24 18:08:29 | INFO | method=POST path=/api/size status=422 duration_ms=5.76 ip=127.0.0.1 user_uid=JP9DJN
+2026-03-24 18:08:56 | INFO | method=POST path=/api/settings/site_name status=200 duration_ms=15.16 ip=testclient user_uid=NzKfjg
+2026-03-24 18:08:56 | INFO | method=GET path=/api/changes/?locale=ru&limit=10 status=200 duration_ms=5.68 ip=testclient user_uid=NzKfjg
+2026-03-24 18:08:57 | INFO | method=POST path=/api/category status=200 duration_ms=34.19 ip=testclient user_uid=VMdbaz
+2026-03-24 18:08:57 | INFO | method=POST path=/api/category status=200 duration_ms=18.28 ip=testclient user_uid=VMdbaz
+2026-03-24 18:08:57 | INFO | method=POST path=/api/color status=200 duration_ms=10.60 ip=testclient user_uid=VMdbaz
+2026-03-24 18:08:57 | INFO | method=POST path=/api/size status=200 duration_ms=10.88 ip=testclient user_uid=VMdbaz
+2026-03-24 18:08:57 | INFO | method=GET path=/api/categories/ru status=200 duration_ms=7.26 ip=testclient user_uid=VMdbaz
+2026-03-24 18:08:57 | INFO | method=GET path=/api/category/G7KlXjYV/en status=200 duration_ms=6.95 ip=testclient user_uid=VMdbaz
+2026-03-24 18:08:57 | INFO | method=GET path=/api/warehouse/specs?locale=ru status=200 duration_ms=18.19 ip=testclient user_uid=VMdbaz
+2026-03-24 18:08:58 | INFO | method=POST path=/api/category status=200 duration_ms=20.56 ip=testclient user_uid=z2uLGg
+2026-03-24 18:08:58 | INFO | method=POST path=/api/category status=200 duration_ms=14.59 ip=testclient user_uid=z2uLGg
+2026-03-24 18:08:58 | INFO | method=POST path=/api/color status=200 duration_ms=10.40 ip=testclient user_uid=z2uLGg
+2026-03-24 18:08:58 | INFO | method=POST path=/api/size status=200 duration_ms=10.38 ip=testclient user_uid=z2uLGg
+2026-03-24 18:08:58 | INFO | method=PUT path=/api/categories status=200 duration_ms=41.74 ip=testclient user_uid=z2uLGg
+2026-03-24 18:08:58 | INFO | method=PUT path=/api/colors status=200 duration_ms=11.81 ip=testclient user_uid=z2uLGg
+2026-03-24 18:08:58 | INFO | method=PUT path=/api/sizes status=200 duration_ms=12.23 ip=testclient user_uid=z2uLGg
+2026-03-24 18:08:58 | INFO | method=GET path=/api/category/HzhZbr7T/ru status=200 duration_ms=5.88 ip=testclient user_uid=z2uLGg
+2026-03-24 18:08:58 | INFO | method=GET path=/api/category/HzhZbr7T/en status=200 duration_ms=5.73 ip=testclient user_uid=z2uLGg
+2026-03-24 18:08:58 | INFO | method=GET path=/api/colors status=200 duration_ms=4.28 ip=testclient user_uid=z2uLGg
+2026-03-24 18:08:58 | INFO | method=GET path=/api/sizes status=200 duration_ms=4.75 ip=testclient user_uid=z2uLGg
+2026-03-24 18:08:58 | INFO | method=POST path=/api/category status=200 duration_ms=21.83 ip=testclient user_uid=TK9jli
+2026-03-24 18:08:58 | INFO | method=POST path=/api/category status=200 duration_ms=12.69 ip=testclient user_uid=TK9jli
+2026-03-24 18:08:58 | INFO | method=POST path=/api/color status=200 duration_ms=8.70 ip=testclient user_uid=TK9jli
+2026-03-24 18:08:58 | INFO | method=POST path=/api/size status=200 duration_ms=8.84 ip=testclient user_uid=TK9jli
+2026-03-24 18:08:58 | INFO | method=DELETE path=/api/category/oAb9nQpV status=200 duration_ms=11.15 ip=testclient user_uid=TK9jli
+2026-03-24 18:08:58 | INFO | method=DELETE path=/api/color/1 status=200 duration_ms=8.37 ip=testclient user_uid=TK9jli
+2026-03-24 18:08:58 | INFO | method=DELETE path=/api/size/1 status=200 duration_ms=7.78 ip=testclient user_uid=TK9jli
+2026-03-24 18:08:58 | INFO | method=GET path=/api/category/oAb9nQpV/ru status=404 duration_ms=4.80 ip=testclient user_uid=TK9jli
+2026-03-24 18:08:58 | INFO | method=GET path=/api/colors status=200 duration_ms=4.06 ip=testclient user_uid=TK9jli
+2026-03-24 18:08:58 | INFO | method=GET path=/api/sizes status=200 duration_ms=3.67 ip=testclient user_uid=TK9jli
+2026-03-24 18:10:09 | INFO | method=GET path=/api/warehouse/specs?locale=ru status=200 duration_ms=39.61 ip=127.0.0.1 user_uid=JP9DJN
+2026-03-24 18:10:15 | INFO | method=POST path=/api/size status=422 duration_ms=3.77 ip=127.0.0.1 user_uid=JP9DJN
+2026-03-24 18:10:35 | INFO | method=POST path=/api/size status=422 duration_ms=18.23 ip=127.0.0.1 user_uid=JP9DJN
+2026-03-24 18:14:57 | INFO | method=POST path=/api/size status=422 duration_ms=19.65 ip=127.0.0.1 user_uid=JP9DJN
+2026-03-24 18:16:21 | INFO | method=POST path=/api/size status=200 duration_ms=14.28 ip=127.0.0.1 user_uid=JP9DJN
+2026-03-24 18:16:21 | INFO | method=GET path=/api/warehouse/specs?locale=ru status=200 duration_ms=12.76 ip=127.0.0.1 user_uid=JP9DJN
+2026-03-24 18:17:10 | INFO | method=POST path=/api/color status=200 duration_ms=15.63 ip=127.0.0.1 user_uid=JP9DJN
+2026-03-24 18:17:10 | INFO | method=GET path=/api/warehouse/specs?locale=ru status=200 duration_ms=10.05 ip=127.0.0.1 user_uid=JP9DJN
+2026-03-24 18:19:01 | INFO | method=GET path=/api/warehouse/specs?locale=ru status=200 duration_ms=17.51 ip=127.0.0.1 user_uid=JP9DJN
+2026-03-24 18:28:01 | INFO | method=GET path=/api/warehouse/specs?locale=ru status=200 duration_ms=28.93 ip=127.0.0.1 user_uid=JP9DJN

@@ -1,11 +1,13 @@
 import json
 from contextlib import asynccontextmanager
+from time import perf_counter
 
 from starlette.responses import Response
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from src.core.action_logging import get_actions_logger
 from src.core.database import session_maker
 from src.exceptions import JSRError
 from src.utils.auth import extract_bearer_token, user_from_token
@@ -20,6 +22,15 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="nascrystal API", version="0.1.0", lifespan=lifespan)
 _SUCCESS_WRAP_EXCLUDED_PATHS = {"/openapi.json", "/docs", "/docs/oauth2-redirect", "/redoc"}
 SECURED = '/api'
+ACTION_LOGGING_PREFIXES = ("/api",)
+actions_logger = get_actions_logger()
+
+
+def _client_ip(request: Request) -> str:
+  forwarded = request.headers.get("x-forwarded-for")
+  if forwarded:
+    return forwarded.split(",")[0].strip()
+  return request.client.host if request.client else "0.0.0.0"
 
 
 @app.middleware("http")
@@ -79,6 +90,46 @@ async def success_response_wrapper(request: Request, call_next):
     if key.lower() not in {"content-length", "content-type"}:
       wrapped_response.headers[key] = value
   return wrapped_response
+
+
+@app.middleware("http")
+async def actions_logging_middleware(request: Request, call_next):
+  if not request.url.path.startswith(ACTION_LOGGING_PREFIXES):
+    return await call_next(request)
+
+  started_at = perf_counter()
+  client_ip = _client_ip(request)
+  path = str(request.url.path)
+  if request.url.query:
+    path = f"{path}?{request.url.query}"
+
+  try:
+    response = await call_next(request)
+  except Exception:
+    duration_ms = round((perf_counter() - started_at) * 1000, 2)
+    user_uid = getattr(request.state, "user_uid", None)
+    actions_logger.exception(
+      "method=%s path=%s status=500 duration_ms=%.2f ip=%s user_uid=%s",
+      request.method,
+      path,
+      duration_ms,
+      client_ip,
+      user_uid or "-",
+    )
+    raise
+
+  duration_ms = round((perf_counter() - started_at) * 1000, 2)
+  user_uid = getattr(request.state, "user_uid", None)
+  actions_logger.info(
+    "method=%s path=%s status=%s duration_ms=%.2f ip=%s user_uid=%s",
+    request.method,
+    path,
+    response.status_code,
+    duration_ms,
+    client_ip,
+    user_uid or "-",
+  )
+  return response
 
 
 @app.exception_handler(BaseError)
