@@ -22,5 +22,6 @@ class ChangeEvent(Base):
       "event_type": self.event_type,
       "payload": self.payload,
       "actor_uid": self.actor_uid,
+      "created": self.created.isoformat(),
       "created_ts": self.created_ts,
     }
