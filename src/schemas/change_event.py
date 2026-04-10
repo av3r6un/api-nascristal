@@ -12,3 +12,7 @@ class ChangeEventItem(BaseModel):
 
 class ChangeEventsResponse(BaseModel):
   items: list[ChangeEventItem]
+  
+
+class LastUpdateResponse(BaseModel):
+  last_update: int

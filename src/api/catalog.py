@@ -1,420 +1,118 @@
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from fastapi import APIRouter, Depends, Request
+from sqlalchemy.orm import selectinload
 
 from src.core.change_logging import record_change
 from src.core.database import get_db
 from src.exceptions import JSRError
-from src.models import Category, CategoryTranslation, Color, Size
-from src.schemas import (
-  BatchUpdateResponse,
-  CategoriesResponse,
-  CategoryBatchUpdateRequest,
-  CategoryRequest,
-  CategoryResponse,
-  CategorySaveResponse,
-  ColorBatchUpdateRequest,
-  ColorsResponse,
-  ColorRequest,
-  ColorResponse,
-  ProcessResponse,
-  SizeBatchUpdateRequest,
-  SizesResponse,
-  SizeRequest,
-  SizeResponse,
-  WarehouseSpecsResponse,
-)
-
-router = APIRouter(tags=["catalog"], prefix='/api')
+from src.models import Property, PropertyOption
+from src.schemas import CatalogResponse, PropertyOptionsPatchRequest, PropertyOptionsResponse
 
 
-def _validate_locale(locale: str) -> None:
-  if locale not in {"ru", "en"}:
-    raise JSRError("bad_request", message="Locale must be 'ru' or 'en'")
+router = APIRouter(prefix="/api/catalog", tags=["catalog"])
 
 
-def _serialize_category(category: Category, translation: CategoryTranslation) -> dict:
+def _serialize_property(property_row: Property) -> dict:
   return {
-    "uid": category.uid,
-    "index": category.index,
-    "icon": category.icon,
-    "locale": translation.locale,
-    "name": translation.name,
-    "description": translation.description,
+    "id": property_row.id,
+    "index": property_row.index,
+    "name": property_row.name,
+    "is_active": property_row.is_active,
   }
 
 
-def _ensure_unique_entries(values: list, entity_name: str) -> None:
-  if len(values) != len(set(values)):
-    raise JSRError("conflict", message=f"Duplicate {entity_name} entries in request")
-
-
-def _actor_uid(request: Request) -> str | None:
-  return getattr(request.state, "user_uid", None)
-
-
-async def _fetch_localized_categories(session: AsyncSession, locale: str) -> list[dict]:
-  query = (
-    select(Category, CategoryTranslation)
-    .join(CategoryTranslation, CategoryTranslation.category_uid == Category.uid)
-    .where(CategoryTranslation.locale == locale)
-    .order_by(Category.index.asc(), Category.uid.asc())
-  )
-  result = await session.execute(query)
-  return [_serialize_category(category, translation) for category, translation in result.all()]
-
-
-@router.get("/categories/{locale}", response_model=CategoriesResponse)
-async def get_categories(locale: str, session: AsyncSession = Depends(get_db)) -> dict[str, list[dict]]:
-  _validate_locale(locale)
-  return {"items": await _fetch_localized_categories(session, locale)}
-
-
-@router.get("/category/{uid}/{locale}", response_model=CategoryResponse)
-async def get_category(uid: str, locale: str, session: AsyncSession = Depends(get_db)) -> dict:
-  _validate_locale(locale)
-
-  query = (
-    select(Category, CategoryTranslation)
-    .join(CategoryTranslation, CategoryTranslation.category_uid == Category.uid)
-    .where(Category.uid == uid)
-    .where(CategoryTranslation.locale == locale)
-  )
-  result = await session.execute(query)
-  row = result.first()
-  if not row:
-    raise JSRError("not_found")
-
-  category, translation = row
-  return _serialize_category(category, translation)
-
-
-@router.post("/category", response_model=CategorySaveResponse, status_code=200)
-async def save_category(
-  payload: CategoryRequest,
-  request: Request,
-  session: AsyncSession = Depends(get_db),
-) -> dict[str, bool | str]:
-  _validate_locale(payload.locale)
-
-  category = await Category.first(session, uid=payload.uid) if payload.uid else None
-  if payload.uid and not category:
-    raise JSRError("not_found")
-
-  category_created = category is None
-  if not category:
-    uid = await Category.create_uid(session)
-    index = payload.index if payload.index is not None else await Category.next_index(session)
-    category = Category(uid=uid, index=index, icon=payload.icon)
-    await category.save(session)
-  else:
-    await category.edit(
-      session,
-      index=payload.index if payload.index is not None else category.index,
-      icon=payload.icon,
-    )
-
-  translation = await CategoryTranslation.first(session, category_uid=category.uid, locale=payload.locale)
-  if not translation:
-    translation = CategoryTranslation(
-      category_uid=category.uid,
-      locale=payload.locale,
-      name=payload.name,
-      description=payload.description,
-    )
-    await translation.save(session)
-  else:
-    await translation.edit(session, name=payload.name, description=payload.description)
-
-  event_type = "catalog.category.created" if category_created else "catalog.category.updated"
-  await record_change(
-    session,
-    event_type,
-    payload={"uid": category.uid, "locale": payload.locale, "name": payload.name},
-    actor_uid=_actor_uid(request),
-  )
-
-  return {"processed": True, "uid": category.uid}
-
-
-@router.put("/categories", response_model=BatchUpdateResponse, status_code=200)
-async def update_categories(
-  payload: CategoryBatchUpdateRequest,
-  request: Request,
-  session: AsyncSession = Depends(get_db),
-) -> dict[str, bool | int]:
-  _ensure_unique_entries([(item.uid, item.locale) for item in payload.items], "category")
-
-  category_base_updates: dict[str, tuple[int, str]] = {}
-  for item in payload.items:
-    _validate_locale(item.locale)
-
-    if item.uid in category_base_updates and category_base_updates[item.uid] != (item.index, item.icon):
-      raise JSRError("bad_request", message=f'Category "{item.uid}" has conflicting base fields in request')
-
-    category = await Category.first(session, uid=item.uid)
-    if not category:
-      raise JSRError("not_found")
-
-    translation = await CategoryTranslation.first(session, category_uid=item.uid, locale=item.locale)
-    if not translation:
-      raise JSRError("not_found")
-
-    category_base_updates[item.uid] = (item.index, item.icon)
-
-  for item in payload.items:
-    category = await Category.first(session, uid=item.uid)
-    translation = await CategoryTranslation.first(session, category_uid=item.uid, locale=item.locale)
-    await category.edit(session, index=item.index, icon=item.icon)
-    await translation.edit(session, name=item.name, description=item.description)
-
-  await record_change(
-    session,
-    "catalog.categories.updated",
-    payload={"count": len(payload.items)},
-    actor_uid=_actor_uid(request),
-  )
-
-  return {"processed": True, "updated": len(payload.items)}
-
-
-@router.delete("/category/{uid}", response_model=ProcessResponse, status_code=200)
-async def delete_category(
-  uid: str,
-  request: Request,
-  session: AsyncSession = Depends(get_db),
-) -> dict[str, bool]:
-  category = await Category.first(session, uid=uid)
-  if not category:
-    raise JSRError("not_found")
-
-  await category.delete(session)
-  await record_change(
-    session,
-    "catalog.category.deleted",
-    payload={"uid": uid},
-    actor_uid=_actor_uid(request),
-  )
-  return {"processed": True}
-
-
-@router.get("/colors", response_model=ColorsResponse)
-async def get_colors(session: AsyncSession = Depends(get_db)) -> dict[str, list[dict]]:
-  colors = await Color.all(session)
-  items = sorted((color.json for color in colors), key=lambda item: item["id"])
-  return {"items": items}
-
-
-@router.get("/color/{color_id}", response_model=ColorResponse)
-async def get_color(color_id: int, session: AsyncSession = Depends(get_db)) -> dict:
-  color = await Color.first(session, id=color_id)
-  if not color:
-    raise JSRError("not_found")
-  return color.json
-
-
-@router.post("/color", response_model=ColorResponse, status_code=200)
-async def save_color(payload: ColorRequest, request: Request, session: AsyncSession = Depends(get_db)) -> dict:
-  if payload.id is None:
-    existing = await Color.first(session, sku=payload.sku)
-    if existing:
-      raise JSRError("conflict", message=f'Color with sku "{payload.sku}" already exists')
-    color = Color(**payload.model_dump(exclude={"id"}))
-    await color.save(session)
-    await record_change(
-      session,
-      "catalog.color.created",
-      payload={"id": color.id, "sku": color.sku, "name": color.name},
-      actor_uid=_actor_uid(request),
-    )
-    return color.json
-
-  color = await Color.first(session, id=payload.id)
-  if not color:
-    raise JSRError("not_found")
-
-  sku_owner = await Color.first(session, sku=payload.sku)
-  if sku_owner and sku_owner.id != color.id:
-    raise JSRError("conflict", message=f'Color with sku "{payload.sku}" already exists')
-
-  await color.edit(session, sku=payload.sku, name=payload.name)
-  await record_change(
-    session,
-    "catalog.color.updated",
-    payload={"id": color.id, "sku": payload.sku, "name": payload.name},
-    actor_uid=_actor_uid(request),
-  )
-  return color.json
-
-
-@router.put("/colors", response_model=BatchUpdateResponse, status_code=200)
-async def update_colors(
-  payload: ColorBatchUpdateRequest,
-  request: Request,
-  session: AsyncSession = Depends(get_db),
-) -> dict[str, bool | int]:
-  _ensure_unique_entries([item.id for item in payload.items], "color")
-  _ensure_unique_entries([item.sku for item in payload.items], "color sku")
-
-  for item in payload.items:
-    color = await Color.first(session, id=item.id)
-    if not color:
-      raise JSRError("not_found")
-
-    sku_owner = await Color.first(session, sku=item.sku)
-    if sku_owner and sku_owner.id != item.id:
-      raise JSRError("conflict", message=f'Color with sku "{item.sku}" already exists')
-
-  for item in payload.items:
-    color = await Color.first(session, id=item.id)
-    await color.edit(session, sku=item.sku, name=item.name)
-
-  await record_change(
-    session,
-    "catalog.colors.updated",
-    payload={"count": len(payload.items)},
-    actor_uid=_actor_uid(request),
-  )
-
-  return {"processed": True, "updated": len(payload.items)}
-
-
-@router.delete("/color/{color_id}", response_model=ProcessResponse, status_code=200)
-async def delete_color(
-  color_id: int,
-  request: Request,
-  session: AsyncSession = Depends(get_db),
-) -> dict[str, bool]:
-  color = await Color.first(session, id=color_id)
-  if not color:
-    raise JSRError("not_found")
-
-  color_payload = color.json
-  await color.delete(session)
-  await record_change(
-    session,
-    "catalog.color.deleted",
-    payload=color_payload,
-    actor_uid=_actor_uid(request),
-  )
-  return {"processed": True}
-
-
-@router.get("/sizes", response_model=SizesResponse)
-async def get_sizes(session: AsyncSession = Depends(get_db)) -> dict[str, list[dict]]:
-  sizes = await Size.all(session)
-  items = sorted((size.json for size in sizes), key=lambda item: item["id"])
-  return {"items": items}
-
-
-@router.get("/size/{size_id}", response_model=SizeResponse)
-async def get_size(size_id: int, session: AsyncSession = Depends(get_db)) -> dict:
-  size = await Size.first(session, id=size_id)
-  if not size:
-    raise JSRError("not_found")
-  return size.json
-
-
-@router.post("/size", response_model=SizeResponse, status_code=200)
-async def save_size(payload: SizeRequest, request: Request, session: AsyncSession = Depends(get_db)) -> dict:
-  if payload.size_min > payload.size_max:
-    raise JSRError("bad_request", message="size_min must be less than or equal to size_max")
-
-  if payload.id is None:
-    existing = await Size.first(session, sku=payload.sku)
-    if existing:
-      raise JSRError("conflict", message=f'Size with sku "{payload.sku}" already exists')
-    size = Size(**payload.model_dump(exclude={"id"}))
-    await size.save(session)
-    await record_change(
-      session,
-      "catalog.size.created",
-      payload={"id": size.id, "sku": size.sku, "size_min": size.size_min, "size_max": size.size_max},
-      actor_uid=_actor_uid(request),
-    )
-    return size.json
-
-  size = await Size.first(session, id=payload.id)
-  if not size:
-    raise JSRError("not_found")
-
-  sku_owner = await Size.first(session, sku=payload.sku)
-  if sku_owner and sku_owner.id != size.id:
-    raise JSRError("conflict", message=f'Size with sku "{payload.sku}" already exists')
-
-  await size.edit(session, sku=payload.sku, size_min=payload.size_min, size_max=payload.size_max)
-  await record_change(
-    session,
-    "catalog.size.updated",
-    payload={"id": size.id, "sku": payload.sku, "size_min": payload.size_min, "size_max": payload.size_max},
-    actor_uid=_actor_uid(request),
-  )
-  return size.json
-
-
-@router.put("/sizes", response_model=BatchUpdateResponse, status_code=200)
-async def update_sizes(
-  payload: SizeBatchUpdateRequest,
-  request: Request,
-  session: AsyncSession = Depends(get_db),
-) -> dict[str, bool | int]:
-  _ensure_unique_entries([item.id for item in payload.items], "size")
-  _ensure_unique_entries([item.sku for item in payload.items], "size sku")
-
-  for item in payload.items:
-    if item.size_min > item.size_max:
-      raise JSRError("bad_request", message="size_min must be less than or equal to size_max")
-
-    size = await Size.first(session, id=item.id)
-    if not size:
-      raise JSRError("not_found")
-
-    sku_owner = await Size.first(session, sku=item.sku)
-    if sku_owner and sku_owner.id != item.id:
-      raise JSRError("conflict", message=f'Size with sku "{item.sku}" already exists')
-
-  for item in payload.items:
-    size = await Size.first(session, id=item.id)
-    await size.edit(session, sku=item.sku, size_min=item.size_min, size_max=item.size_max)
-
-  await record_change(
-    session,
-    "catalog.sizes.updated",
-    payload={"count": len(payload.items)},
-    actor_uid=_actor_uid(request),
-  )
-
-  return {"processed": True, "updated": len(payload.items)}
-
-
-@router.delete("/size/{size_id}", response_model=ProcessResponse, status_code=200)
-async def delete_size(
-  size_id: int,
-  request: Request,
-  session: AsyncSession = Depends(get_db),
-) -> dict[str, bool]:
-  size = await Size.first(session, id=size_id)
-  if not size:
-    raise JSRError("not_found")
-
-  size_payload = size.json
-  await size.delete(session)
-  await record_change(
-    session,
-    "catalog.size.deleted",
-    payload=size_payload,
-    actor_uid=_actor_uid(request),
-  )
-  return {"processed": True}
-
-
-@router.get("/warehouse/specs", response_model=WarehouseSpecsResponse)
-async def get_warehouse_specs(locale: str, session: AsyncSession = Depends(get_db)) -> dict[str, list[dict]]:
-  _validate_locale(locale)
-  colors = await Color.all(session)
-  sizes = await Size.all(session)
+def _serialize_catalog_option(option: PropertyOption) -> dict:
   return {
-    "categories": await _fetch_localized_categories(session, locale),
-    "colors": sorted((color.json for color in colors), key=lambda item: item["id"]),
-    "sizes": sorted((size.json for size in sizes), key=lambda item: item["id"]),
+    "id": option.id,
+    "property_id": option.property_id,
+    "value": option.value,
+    "name": option.name,
+    "icon": option.icon,
   }
+
+
+def _serialize_option(option: PropertyOption) -> dict:
+  return {
+    "id": option.id,
+    "eid": option.eid,
+    "property_id": option.property_id,
+    "value": option.value,
+    "name": option.name,
+    "icon": option.icon,
+    "is_active": option.is_active,
+    "property": {
+      "id": option.property.id,
+      "eid": option.property.eid,
+      "index": option.property.index,
+      "name": option.property.name,
+      "is_active": option.property.is_active,
+    },
+  }
+
+
+async def _fetch_properties(session: AsyncSession) -> list[Property]:
+  query = select(Property).order_by(Property.index.asc(), Property.id.asc())
+  result = await session.execute(query)
+  return result.scalars().all()
+
+
+async def _fetch_property_options(session: AsyncSession) -> list[PropertyOption]:
+  query = (
+    select(PropertyOption)
+    .options(selectinload(PropertyOption.property))
+    .order_by(PropertyOption.property_id.asc(), PropertyOption.value.asc(), PropertyOption.id.asc())
+  )
+  result = await session.execute(query)
+  return result.scalars().all()
+
+
+@router.get("/", response_model=CatalogResponse, status_code=200)
+async def get_catalog(session: AsyncSession = Depends(get_db)) -> dict[str, list[dict]]:
+  properties = await _fetch_properties(session)
+  options = await _fetch_property_options(session)
+  return {
+    "properties": [_serialize_property(property_row) for property_row in properties],
+    "options": [_serialize_catalog_option(option) for option in options],
+  }
+
+
+@router.get("/options/", response_model=PropertyOptionsResponse, status_code=200)
+async def get_property_options(session: AsyncSession = Depends(get_db)) -> dict[str, list[dict]]:
+  options = await _fetch_property_options(session)
+  return {"items": [_serialize_option(option) for option in options]}
+
+
+@router.patch("/options/", response_model=PropertyOptionsResponse, status_code=200)
+async def patch_property_options(
+  payload: PropertyOptionsPatchRequest,
+  request: Request,
+  session: AsyncSession = Depends(get_db),
+) -> dict[str, list[dict]]:
+  requested_ids = [item.id for item in payload.items]
+  result = await session.execute(select(PropertyOption).where(PropertyOption.id.in_(requested_ids)))
+  options_by_id = {option.id: option for option in result.scalars().all()}
+
+  missing_ids = sorted(set(requested_ids) - set(options_by_id))
+  if missing_ids:
+    raise JSRError("not_found", message=f"Property options not found: {', '.join(str(item) for item in missing_ids)}")
+
+  for item in payload.items:
+    option = options_by_id[item.id]
+    if "name" in item.model_fields_set:
+      option.name = item.name
+    if "icon" in item.model_fields_set:
+      option.icon = item.icon
+
+  await session.commit()
+
+  actor_uid = getattr(request.state, "user_uid", None)
+  await record_change(
+    session,
+    "property_options.updated",
+    payload={"ids": requested_ids},
+    actor_uid=actor_uid,
+  )
+
+  options = await _fetch_property_options(session)
+  return {"items": [_serialize_option(option) for option in options]}

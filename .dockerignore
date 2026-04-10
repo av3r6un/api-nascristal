@@ -11,3 +11,5 @@ test.db
 uv.lock.bak
 docker-compose.example.yml
 tests/
+1c_exchange
+.uv_cache

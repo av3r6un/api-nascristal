@@ -4,12 +4,15 @@ import json
 import os
 import secrets
 from datetime import datetime, timedelta, timezone
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 from threading import Lock
 from xml.etree import ElementTree as ET
 
 from fastapi import APIRouter, Request
 from fastapi.responses import PlainTextResponse as PTR
+
+from src.core.database import session_maker
+from src.services.onec_import import compute_catalog_md5, create_import_run, import_catalog
 
 
 router = APIRouter(prefix='/1c', tags=['1c'])
@@ -33,6 +36,10 @@ _sessions_lock = Lock()
 
 def _utc_now() -> datetime:
   return datetime.now(timezone.utc)
+
+
+def _local_now_naive() -> datetime:
+  return datetime.now().astimezone().replace(tzinfo=None)
 
 
 def _request_id() -> str:
@@ -147,6 +154,19 @@ def _validate_xml_if_needed(abs_path: str) -> tuple[bool, str]:
 
 def _plain_failure(message: str) -> PTR:
   return PTR(f'failure\n{message}', media_type='text/plain; charset=utf-8')
+
+
+def _catalog_pair_for(abs_path: str) -> tuple[Path, Path] | None:
+  current = Path(abs_path)
+  stem = current.stem.lower()
+  if stem not in {"import", "offers"}:
+    return None
+
+  import_path = current if stem == "import" else current.with_name("import.xml")
+  offers_path = current if stem == "offers" else current.with_name("offers.xml")
+  if import_path.exists() and offers_path.exists():
+    return import_path, offers_path
+  return None
 
 
 @router.api_route('/1c_exchange', methods=['GET', 'POST'])
@@ -292,6 +312,64 @@ async def exchange(req: Request):
       xml=xml_message,
       exchange_type=exchange_type,
     )
+
+    if exchange_type == "catalog":
+      catalog_pair = _catalog_pair_for(abs_path)
+      if catalog_pair is None:
+        async with session_maker() as session:
+          run = await create_import_run(
+            session,
+            exchange_type=exchange_type or "catalog",
+            classifier_id=None,
+            source_md5=info["md5"],
+            status="awaiting_pair",
+            started_at=_local_now_naive(),
+            finished_at=_local_now_naive(),
+          )
+        log_event(
+          'import.catalog.awaiting_pair',
+          rid,
+          session_id=sid,
+          filename=filename,
+          import_run_id=run.id,
+        )
+      else:
+        import_path, offers_path = catalog_pair
+        try:
+          async with session_maker() as session:
+            summary = await import_catalog(
+              session,
+              import_path=import_path,
+              offers_path=offers_path,
+              exchange_type=exchange_type,
+              source_md5=compute_catalog_md5(import_path, offers_path),
+            )
+        except Exception as exc:
+          log_event(
+            'import.catalog.failure',
+            rid,
+            session_id=sid,
+            filename=filename,
+            import_path=str(import_path),
+            offers_path=str(offers_path),
+            detail=str(exc),
+          )
+          return _plain_failure(f'catalog import failed: {exc}')
+
+        log_event(
+          'import.catalog.success',
+          rid,
+          session_id=sid,
+          filename=filename,
+          import_run_id=summary.import_run_id,
+          categories=summary.categories,
+          properties=summary.properties,
+          property_options=summary.property_options,
+          products=summary.products,
+          product_images=summary.product_images,
+          product_attributes=summary.product_attributes,
+          offers=summary.offers,
+        )
     return PTR('success', media_type='text/plain; charset=utf-8')
 
   if mode == 'query':

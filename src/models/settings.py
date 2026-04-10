@@ -14,14 +14,15 @@ class SettingsKeys(enum.Enum):
   MAP = 'map'
   SEO = 'seo'
   MAINTENANCE = 'maintenance'
+  PRODUCTS_PAGE_LIMIT = 'products_page_limit'
   
 
 class Setting(Base):
   id: Mapped[int] = mapped_column(Integer, primary_key=True)
   key: Mapped[SettingsKeys] = mapped_column(Enum(SettingsKeys), nullable=False)
-  value: Mapped[dict | bool] =  mapped_column(JSON, nullable=False, default=False)
+  value: Mapped[dict | bool | int | str] =  mapped_column(JSON, nullable=False, default=False)
   
-  def __init__(self, key: str, value: str| dict | bool, **kwargs) -> None:
+  def __init__(self, key: str, value: str | dict | bool | int, **kwargs) -> None:
     self.key = SettingsKeys(key)
     self.value = value
     
