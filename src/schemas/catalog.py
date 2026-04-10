@@ -1,7 +1,21 @@
-from typing import Any
-
-from pydantic import RootModel
+from pydantic import BaseModel
 
 
-class CatalogResponse(RootModel[list[dict]]):
-  pass
+class CatalogPropertyItem(BaseModel):
+  id: int
+  index: int
+  name: str
+  is_active: bool
+
+
+class CatalogOptionItem(BaseModel):
+  id: int
+  property_id: int
+  value: str
+  name: str | None
+  icon: str | None
+
+
+class CatalogResponse(BaseModel):
+  properties: list[CatalogPropertyItem]
+  options: list[CatalogOptionItem]

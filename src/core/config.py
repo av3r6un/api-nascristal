@@ -6,6 +6,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
   STAGE: Literal["DEV", "PROD"] = os.getenv('STAGE')
+  DB_URL: str | None = None
 
   DB_USER: str
   DB_PASS: str
@@ -25,6 +26,8 @@ class Settings(BaseSettings):
 
   @property
   def db_url(self) -> str:
+    if self.DB_URL:
+      return self.DB_URL
     if self.STAGE == "DEV":
       return "sqlite+aiosqlite:///./dev.db"
     return f"mysql+aiomysql://{self.DB_USER}:{self.DB_PASS}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"

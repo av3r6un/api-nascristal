@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 from jwt import ExpiredSignatureError, PyJWTError
+from src.core.change_logging import record_change
 from src.core.database import get_db
 from src.core.security import decode_token
 from src.exceptions import JSRError
@@ -39,10 +40,13 @@ async def register(payload: RegisterRequest, request: Request, session: AsyncSes
     role=payload.role,
   )
   await user.save(session)
+  await record_change(session, "auth.user.registered", payload={"email": payload.email}, actor_uid=user.uid)
   return dict(processed=True)
 
 
-@router.post("/", response_model=AuthResponse)
+@router.post("", response_model=AuthResponse, include_in_schema=False)
+@router.post("/", response_model=AuthResponse, include_in_schema=False)
+@router.post("/login", response_model=AuthResponse)
 async def login(payload: LoginRequest, request: Request, session: AsyncSession = Depends(get_db)) -> dict[str, Any]:
   login_data = await User.login(session, payload.email, payload.password, _client_ip(request))
   return {"user": {"uid": login_data["uid"], "email": login_data["email"], "role": login_data["role"]}, "tokens": login_data["tokens"]}
