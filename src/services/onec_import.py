@@ -2,16 +2,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime as dt
-from functools import lru_cache
 import hashlib
-import importlib.util
 from pathlib import Path
-from types import ModuleType
 
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.onec_catalog import Category, Offer, OneCImportRuns, Product, ProductAttribute, ProductImage, Property, PropertyOption, uuid1_str
+from src.services.commerce_ml_parser import CommerceMLParser
 
 
 @dataclass(slots=True)
@@ -26,31 +24,8 @@ class OneCImportSummary:
   offers: int
 
 
-def _repo_root() -> Path:
-  return Path(__file__).resolve().parents[2]
-
-
 def _local_now_naive() -> dt:
   return dt.now().astimezone().replace(tzinfo=None)
-
-
-@lru_cache(maxsize=1)
-def _load_parser_module() -> ModuleType:
-  module_path = _repo_root() / "1c_exchange" / "xml_to_json.py"
-  spec = importlib.util.spec_from_file_location("onec_xml_to_json", module_path)
-  if spec is None or spec.loader is None:
-    raise RuntimeError(f"Failed to load CommerceMLParser from {module_path}")
-  module = importlib.util.module_from_spec(spec)
-  spec.loader.exec_module(module)
-  return module
-
-
-def load_commerce_ml_parser():
-  module = _load_parser_module()
-  parser_cls = getattr(module, "CommerceMLParser", None)
-  if parser_cls is None:
-    raise RuntimeError("CommerceMLParser is not available")
-  return parser_cls
 
 
 def compute_catalog_md5(import_path: str | Path, offers_path: str | Path) -> str:
@@ -63,7 +38,7 @@ def compute_catalog_md5(import_path: str | Path, offers_path: str | Path) -> str
 
 
 def parse_catalog(import_path: str | Path, offers_path: str | Path) -> dict:
-  parser = load_commerce_ml_parser()(import_path, offers_path)
+  parser = CommerceMLParser(import_path, offers_path)
   parsed = parser.parse()
   if not isinstance(parsed, dict):
     raise RuntimeError("CommerceMLParser returned unexpected payload")
