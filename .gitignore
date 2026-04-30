@@ -9,6 +9,7 @@ wheels/
 # Virtual environments
 .venv
 .pytest_cache
+.pytest-*
 .env
 .python-version
 *.db

@@ -142,6 +142,7 @@ async def import_catalog(
     }
 
     next_category_index = await _next_category_index(session)
+    next_property_index = max((item.index for item in properties.values()), default=0) + 1
     seen_property_ids: set[str] = set()
     seen_option_ids: set[str] = set()
     seen_product_ids: set[str] = set()
@@ -177,24 +178,24 @@ async def import_catalog(
         if property_id and property_id not in property_parent_category_ids:
           property_parent_category_ids[property_id] = category.id
 
-    for property_index, item in enumerate(parsed.get("properties", []), start=1):
+    for item in parsed.get("properties", []):
       property_row = properties.get(item["id"])
       parent_category_id = property_parent_category_ids.get(item["id"])
       if property_row is None:
         property_row = Property(
           eid=item["id"],
           parent_category_id=parent_category_id,
-          index=property_index,
+          index=next_property_index,
           name=item["name"],
           is_active=True,
         )
+        next_property_index += 1
         session.add(property_row)
         await session.flush()
         properties[property_row.eid] = property_row
         property_id_to_eid[property_row.id] = property_row.eid
       else:
         property_row.parent_category_id = parent_category_id
-        property_row.index = property_index
         property_row.name = item["name"]
         property_row.is_active = True
       seen_property_ids.add(property_row.eid)
@@ -275,10 +276,11 @@ async def import_catalog(
           property_row = Property(
             eid=property_id,
             parent_category_id=property_parent_category_ids.get(property_id),
-            index=0,
+            index=next_property_index,
             name=property_id,
             is_active=True,
           )
+          next_property_index += 1
           session.add(property_row)
           await session.flush()
           properties[property_id] = property_row
