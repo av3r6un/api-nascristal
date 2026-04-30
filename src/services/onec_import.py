@@ -129,10 +129,13 @@ async def import_catalog(
       item.eid: item
       for item in (await session.execute(select(Product))).scalars().all()
     }
+    products_by_sku = {item.sku: item for item in products.values()}
+    products_by_code = {item.code: item for item in products.values()}
     offers = {
       item.eid: item
       for item in (await session.execute(select(Offer))).scalars().all()
     }
+    offers_by_product_id = {item.product_id: item for item in offers.values()}
 
     property_id_to_eid = {item.id: item.eid for item in properties.values()}
     option_by_property_and_value = {
@@ -222,13 +225,15 @@ async def import_catalog(
 
     for item in parsed.get("products", []):
       product_eid = item["id"]
-      product = products.get(product_eid)
+      product_sku = item["sku"]
+      product_code = item["code"]
+      product = products.get(product_eid) or products_by_sku.get(product_sku) or products_by_code.get(product_code)
       category = categories.get(item.get("category_id") or "")
       if product is None:
         product = Product(
           eid=product_eid,
-          sku=item["sku"],
-          code=item["code"],
+          sku=product_sku,
+          code=product_code,
           name=item["name"],
           description=item.get("description") or None,
           category_id=category.id if category else None,
@@ -240,14 +245,27 @@ async def import_catalog(
         await session.flush()
         products[product.eid] = product
       else:
-        product.sku = item["sku"]
-        product.code = item["code"]
+        old_product_eid = product.eid
+        old_product_sku = product.sku
+        old_product_code = product.code
+        product.eid = product_eid
+        product.sku = product_sku
+        product.code = product_code
         product.name = item["name"]
         product.description = item.get("description") or None
         product.category_id = category.id if category else None
         product.primary_image = item.get("image") or None
         product.is_active = True
         product.last_seen_import_run_id = run.id
+        if old_product_eid != product_eid:
+          products.pop(old_product_eid, None)
+        if old_product_sku != product_sku:
+          products_by_sku.pop(old_product_sku, None)
+        if old_product_code != product_code:
+          products_by_code.pop(old_product_code, None)
+        products[product.eid] = product
+      products_by_sku[product.sku] = product
+      products_by_code[product.code] = product
       seen_product_ids.add(product.eid)
 
       await session.execute(delete(ProductImage).where(ProductImage.product_id == product.id))
@@ -321,7 +339,7 @@ async def import_catalog(
 
       offer_eid = product.eid
       product_price = item.get("price", {})
-      offer = offers.get(offer_eid)
+      offer = offers.get(offer_eid) or offers_by_product_id.get(product.id)
       if offer is None:
         offer = Offer(
           eid=offer_eid,
@@ -334,8 +352,9 @@ async def import_catalog(
           currency=_stringify_value(product_price.get("currency")) or None,
         )
         session.add(offer)
-        offers[offer.eid] = offer
       else:
+        old_offer_eid = offer.eid
+        offer.eid = offer_eid
         offer.product_id = product.id
         offer.quantity = _as_float(item.get("quantity"))
         offer.unit = _stringify_value(product_price.get("unit")) or None
@@ -343,6 +362,10 @@ async def import_catalog(
         offer.is_active = True
         offer.amount = _as_float(product_price.get("amount"))
         offer.currency = _stringify_value(product_price.get("currency")) or None
+        if old_offer_eid != offer_eid:
+          offers.pop(old_offer_eid, None)
+      offers[offer.eid] = offer
+      offers_by_product_id[offer.product_id] = offer
       seen_offer_ids.add(offer.eid)
 
     for property_row in properties.values():
