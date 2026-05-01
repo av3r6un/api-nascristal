@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Depends, Query
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, Query, Request
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from src.core.change_logging import record_change
 from src.core.database import get_db
-from src.models import Product, ProductAttribute, Setting
+from src.models import Offer, Product, ProductAttribute, ProductImage, Setting
 from src.models.settings import SettingsKeys
 from src.schemas import ProductsResponse
 
@@ -13,6 +14,28 @@ router = APIRouter(prefix="/api/products", tags=["products"])
 
 DEFAULT_PRODUCTS_PAGE_LIMIT = 20
 MAX_PRODUCTS_PAGE_LIMIT = 100
+
+
+async def _count_rows(session: AsyncSession, model) -> int:
+  result = await session.execute(select(func.count()).select_from(model))
+  return int(result.scalar_one())
+
+
+async def _purge_products(session: AsyncSession) -> dict[str, int]:
+  counts = {
+    "product_attributes": await _count_rows(session, ProductAttribute),
+    "product_images": await _count_rows(session, ProductImage),
+    "offers": await _count_rows(session, Offer),
+    "products": await _count_rows(session, Product),
+  }
+
+  await session.execute(delete(ProductAttribute))
+  await session.execute(delete(ProductImage))
+  await session.execute(delete(Offer))
+  await session.execute(delete(Product))
+  await session.commit()
+
+  return counts
 
 
 def _serialize_offer(offer) -> dict:
@@ -128,3 +151,19 @@ async def get_products(
     "page_index": page_index,
     "has_next_page": has_next_page,
   }
+
+
+@router.post("/purge", status_code=200)
+async def purge_products(
+  request: Request,
+  session: AsyncSession = Depends(get_db),
+) -> dict[str, dict[str, int]]:
+  counts = await _purge_products(session)
+  actor_uid = getattr(request.state, "user_uid", None)
+  await record_change(
+    session,
+    "products.purged",
+    payload=counts,
+    actor_uid=actor_uid,
+  )
+  return {"deleted": counts}
