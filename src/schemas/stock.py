@@ -42,6 +42,7 @@ class StockOfferItem(BaseModel):
 
 
 class StockItem(BaseModel):
+  id: int
   name: str
   images: list[StockImageItem]
   category: StockCategoryItem | None

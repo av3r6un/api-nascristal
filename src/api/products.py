@@ -139,6 +139,7 @@ async def _fetch_products_page(session: AsyncSession, page_index: int, page_limi
   products = result.scalars().all()
   has_next_page = len(products) > page_limit
   return products[:page_limit], has_next_page
+
 @router.get("/", response_model=ProductsResponse, status_code=200)
 async def get_products(
   page_index: int = Query(default=0, ge=0),
