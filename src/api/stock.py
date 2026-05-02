@@ -129,7 +129,7 @@ def _stock_item_sort_key(item: dict) -> tuple:
 
 def _serialize_stock_offer(product: Product, variant: dict | None, offer) -> dict:
   return {
-    "id": offer.id,
+    "id": offer.product_id,
     "eid": offer.eid,
     "product_id": product.id,
     "product_eid": product.eid,
@@ -164,6 +164,7 @@ def _group_products(products: list[Product]) -> dict[tuple, dict]:
         "name": product.name,
         "primary_image": product.primary_image,
         "images": [],
+        "id": product.id,
         "category": _serialize_category(product),
         "options": _serialize_non_size_options(product),
         "offers": [],
