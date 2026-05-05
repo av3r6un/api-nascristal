@@ -108,7 +108,6 @@ def _stock_group_key(product: Product) -> tuple:
   return (
     category.id if category else None,
     product.name,
-    product.primary_image or "",
     option_key,
   )
 
@@ -317,11 +316,6 @@ async def _fetch_stock_group_products(session: AsyncSession, product: Product) -
     query = query.where(Product.category_id.is_(None))
   else:
     query = query.where(Product.category_id == product.category_id)
-
-  if product.primary_image is None:
-    query = query.where(Product.primary_image.is_(None))
-  else:
-    query = query.where(Product.primary_image == product.primary_image)
 
   result = await session.execute(query)
   return result.scalars().all()

@@ -28,13 +28,18 @@ class StockVariantItem(BaseModel):
 
 class StockOfferItem(BaseModel):
   id: int
+  eid: str
+  product_id: int
+  product_eid: str
   sku: str
+  code: str
   name: str
   description: str | None
   primary_image: str | None
   product_is_active: bool
   quantity: float
   unit: str | None
+  coefficient: float
   is_active: bool
   amount: float
   currency: str | None
@@ -44,6 +49,7 @@ class StockOfferItem(BaseModel):
 class StockItem(BaseModel):
   id: int
   name: str
+  primary_image: str | None
   images: list[StockImageItem]
   category: StockCategoryItem | None
   options: list[StockOptionItem]
