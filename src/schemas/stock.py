@@ -34,7 +34,6 @@ class StockOfferItem(BaseModel):
   sku: str
   code: str
   name: str
-  description: str | None
   primary_image: str | None
   product_is_active: bool
   quantity: float
@@ -49,6 +48,7 @@ class StockOfferItem(BaseModel):
 class StockItem(BaseModel):
   id: int
   name: str
+  description: str | None
   primary_image: str | None
   images: list[StockImageItem]
   category: StockCategoryItem | None
@@ -58,9 +58,6 @@ class StockItem(BaseModel):
 
 class StockResponse(BaseModel):
   items: list[StockItem]
+  filters: dict[str, list[dict[str, str | None]]]
   page_index: int
   has_next_page: bool
-
-
-class StockOptionsResponse(BaseModel):
-  filters: dict[str, list[dict[str, str | None]]] | None = None
