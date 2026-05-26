@@ -10,7 +10,7 @@ from sqlalchemy.orm import selectinload
 from src.core.database import get_db
 from src.exceptions import JSRError
 from src.models import Product, ProductAttribute
-from src.schemas.stock import StockItem, StockOptionsResponse, StockResponse
+from src.schemas.stock import StockItem, StockResponse
 
 
 router = APIRouter(prefix="/api/stock", tags=["stock"])
@@ -19,6 +19,7 @@ SIZE_PROPERTY_ID = 2
 STOCK_PAGE_LIMIT = 9
 _NATURAL_SORT_PATTERN = re.compile(r"(\d+)")
 _PAGINATION_QUERY_KEYS = {"page", "page_index"}
+_DYNAMIC_FILTER_PROPERTY_NAMES = {"color", "colour", "size", "\u0446\u0432\u0435\u0442", "\u0440\u0430\u0437\u043c\u0435\u0440"}
 
 
 def _natural_sort_key(value: str | None) -> tuple:
@@ -135,7 +136,6 @@ def _serialize_stock_offer(product: Product, variant: dict | None, offer) -> dic
     "sku": product.sku,
     "code": product.code,
     "name": product.name,
-    "description": product.description,
     "primary_image": product.primary_image,
     "product_is_active": product.is_active,
     "quantity": float(offer.quantity),
@@ -161,6 +161,7 @@ def _group_products(products: list[Product]) -> dict[tuple, dict]:
     if item is None:
       item = {
         "name": product.name,
+        "description": product.description,
         "primary_image": product.primary_image,
         "images": [],
         "id": product.id,
@@ -201,7 +202,7 @@ def _paginate_stock_items(items: list[dict], page_index: int) -> tuple[list[dict
   return page_items[:STOCK_PAGE_LIMIT], has_next_page
 
 
-def _serialize_filters(products: list[Product]) -> dict[str, list[dict[str, str | None]]] | None:
+def _collect_property_filters(products: list[Product]) -> dict[str, dict[int, tuple[str, str | None]]]:
   grouped_filters: dict[str, dict[int, tuple[str, str | None]]] = {}
 
   for product in products:
@@ -217,9 +218,42 @@ def _serialize_filters(products: list[Product]) -> dict[str, list[dict[str, str 
       property_filters = grouped_filters.setdefault(property_index, {})
       property_filters[option.id] = (option.value, option.name)
 
-  if not grouped_filters:
-    return None
+  return grouped_filters
 
+
+def _is_dynamic_filter_attribute(attribute: ProductAttribute) -> bool:
+  property_name = (attribute.property.name or "").strip().lower()
+  return attribute.property_id == SIZE_PROPERTY_ID or property_name in _DYNAMIC_FILTER_PROPERTY_NAMES
+
+
+def _collect_dynamic_filter_property_indexes(products: list[Product]) -> set[str]:
+  return {
+    str(attribute.property.index)
+    for product in products
+    for attribute in product.attributes
+    if _is_dynamic_filter_attribute(attribute)
+  }
+
+
+def _merge_static_and_dynamic_filters(
+  products: list[Product],
+  filtered_products: list[Product],
+) -> dict[str, dict[int, tuple[str, str | None]]]:
+  filters = _collect_property_filters(products)
+  filtered_filters = _collect_property_filters(filtered_products)
+
+  for property_index in _collect_dynamic_filter_property_indexes(products):
+    if property_index in filtered_filters:
+      filters[property_index] = filtered_filters[property_index]
+    else:
+      filters.pop(property_index, None)
+
+  return filters
+
+
+def _serialize_grouped_filters(
+  grouped_filters: dict[str, dict[int, tuple[str, str | None]]],
+) -> dict[str, list[dict[str, str | None]]]:
   return {
     property_id: [
       {value: name}
@@ -230,6 +264,17 @@ def _serialize_filters(products: list[Product]) -> dict[str, list[dict[str, str 
     ]
     for property_id, options in sorted(grouped_filters.items(), key=lambda item: int(item[0]))
   }
+
+
+def _serialize_filters(products: list[Product]) -> dict[str, list[dict[str, str | None]]]:
+  return _serialize_grouped_filters(_collect_property_filters(products))
+
+
+def _serialize_available_filters(
+  products: list[Product],
+  filtered_products: list[Product],
+) -> dict[str, list[dict[str, str | None]]]:
+  return _serialize_grouped_filters(_merge_static_and_dynamic_filters(products, filtered_products))
 
 
 def _parse_stock_filters(request: Request) -> dict[int, set[str]]:
@@ -271,6 +316,15 @@ def _product_matches_filters(product: Product, filters: dict[int, set[str]]) -> 
       return False
 
   return True
+
+
+def _static_stock_filters(products: list[Product], filters: dict[int, set[str]]) -> dict[int, set[str]]:
+  dynamic_property_indexes = {int(property_index) for property_index in _collect_dynamic_filter_property_indexes(products)}
+  return {
+    property_index: allowed_values
+    for property_index, allowed_values in filters.items()
+    if property_index not in dynamic_property_indexes
+  }
 
 
 def _stock_product_query():
@@ -326,25 +380,23 @@ async def get_stock(
   request: Request,
   page_index: int = Query(default=0, ge=0),
   session: AsyncSession = Depends(get_db),
-) -> dict[str, list[dict] | int | bool]:
+) -> dict[str, list[dict] | int | bool | dict[str, list[dict[str, str | None]]]]:
   products = await _fetch_products(session)
   filters = _parse_stock_filters(request)
-  products = [product for product in products if _product_matches_filters(product, filters)]
-  items, has_next_page = _paginate_stock_items(_serialize_stock_items(products), page_index)
+  filtered_products = [product for product in products if _product_matches_filters(product, filters)]
+  static_filters = _static_stock_filters(products, filters)
+  filter_context_products = (
+    [product for product in products if _product_matches_filters(product, static_filters)]
+    if static_filters
+    else products
+  )
+  items, has_next_page = _paginate_stock_items(_serialize_stock_items(filtered_products), page_index)
   return {
     "items": items,
+    "filters": _serialize_available_filters(products, filter_context_products),
     "page_index": page_index,
     "has_next_page": has_next_page,
   }
-
-
-@router.options("/", response_model=StockOptionsResponse, response_model_exclude_none=True, status_code=200)
-async def get_stock_options(session: AsyncSession = Depends(get_db)) -> dict:
-  products = await _fetch_products(session)
-  filters = _serialize_filters(products)
-  if filters is None:
-    return {}
-  return {"filters": filters}
 
 
 @router.get("/{product_id}", response_model=StockItem, status_code=200)
