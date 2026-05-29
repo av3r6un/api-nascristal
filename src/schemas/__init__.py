@@ -5,6 +5,7 @@ from .change_event import ChangeEventsResponse, LastUpdateResponse
 from .feedback import FeedbackResponse, FeedbackRequest
 from .i18n import I18nPatchResponse
 from .product import ProductsResponse
+from .purchase import PurchaseCreateRequest, PurchasePatchRequest, PurchaseResponse, PurchasesResponse
 from .property_option import PropertyOptionsPatchRequest, PropertyOptionsResponse
 from .stock import StockResponse
 from .static import StaticPageResponse, StaticPageRequest, StaticPagesResponse

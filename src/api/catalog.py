@@ -33,6 +33,7 @@ def _serialize_catalog_option(option: PropertyOption) -> dict:
 
 
 def _serialize_option(option: PropertyOption) -> dict:
+  print(option.property, option.property_id)
   return {
     "id": option.id,
     "eid": option.eid,
@@ -77,13 +78,13 @@ async def get_catalog(session: AsyncSession = Depends(get_db)) -> dict[str, list
   }
 
 
-@router.get("/options/", response_model=PropertyOptionsResponse, status_code=200)
+@router.get("/options", response_model=PropertyOptionsResponse, status_code=200)
 async def get_property_options(session: AsyncSession = Depends(get_db)) -> dict[str, list[dict]]:
   options = await _fetch_property_options(session)
   return {"items": [_serialize_option(option) for option in options]}
 
 
-@router.patch("/options/", response_model=PropertyOptionsResponse, status_code=200)
+@router.patch("/options", response_model=PropertyOptionsResponse, status_code=200)
 async def patch_property_options(
   payload: PropertyOptionsPatchRequest,
   request: Request,
