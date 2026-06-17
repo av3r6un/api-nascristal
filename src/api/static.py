@@ -85,4 +85,4 @@ async def get_page(slug: str, locale: str, session: AsyncSession = Depends(get_d
   if not page: raise JSRError('not_found')
   translated_page = await StaticPagesTranslation.first(session, page_id=page.id, locale=locale)
   if not translated_page: raise JSRError('not_found')
-  return translated_page.json
+  return translated_page.json | page.json

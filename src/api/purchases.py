@@ -17,6 +17,7 @@ def _contact_info(payload: PurchaseCreateRequest) -> dict:
     "name": payload.name,
     "phone": payload.phone,
     "delivery": payload.delivery,
+    "username": payload.username,
   }
 
 

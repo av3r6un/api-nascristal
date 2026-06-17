@@ -33,11 +33,11 @@ class StaticPage(Base):
       for tr in page.translations:
         if tr.locale == locale:
           navbar[page.slug] = tr.title
-    return dict(navbar=navbar)
+    return dict(pages=navbar)
   
   @property
   def json(self):
-    return dict(id=self.id, slug=self.slug, status=self.status.value)
+    return dict(id=self.id, slug=self.slug, status=self.status.value, updated=self.updated_ts)
 
 
 class StaticPagesTranslation(Base):

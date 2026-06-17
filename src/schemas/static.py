@@ -12,6 +12,7 @@ class StaticPageResponse(BaseModel):
   meta_description: str | None
   og_image: str | None
   content: dict[str, Any] | None
+  updated: int | None
 
 
 class StaticPageListItem(BaseModel):
