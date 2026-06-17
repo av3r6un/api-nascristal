@@ -21,12 +21,13 @@ class PurchaseCreateRequest(BaseModel):
   payment: str
   phone: str
   price: int = Field(ge=0)
-
+  username: str | None = None
 
 class PurchaseContactInfo(BaseModel):
   name: str
   phone: str
   delivery: str
+  username: str | None = None
 
 
 class PurchasePatchRequest(BaseModel):
