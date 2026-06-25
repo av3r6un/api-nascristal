@@ -27,7 +27,7 @@ ACTION_LOGGING_PREFIXES = ("/api",)
 actions_logger = get_actions_logger()
 BODY_LOG_PREVIEW_LIMIT = 500
 BODY_LOG_CAPTURE_LIMIT = 64 * 1024
-SENSITIVE_BODY_KEYS = {"authorization", "password", "token", "access_token", "refresh_token"}
+SENSITIVE_BODY_KEYS = {"authorization", "password", "token", "access_token", "refresh_token" }
 
 
 def _client_ip(request: Request) -> str:
