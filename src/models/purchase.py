@@ -1,10 +1,16 @@
 import enum
 import uuid
 
-from sqlalchemy import Enum, Integer, JSON, String
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import Enum, ForeignKey, Integer, JSON, String
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
+
+
+class PaymentStatus(enum.Enum):
+  PENDING = "pending"
+  PAID = "paid"
+  FAILED = "failed"
 
 
 class PurchaseStatus(enum.Enum):
@@ -14,15 +20,10 @@ class PurchaseStatus(enum.Enum):
   FINISHED = "finished"
 
 
-class PaymentStatus(enum.Enum):
-  PENDING = "pending"
-  PAID = "paid"
-  FAILED = "failed"
-
-
 class Purchase(Base):
   id: Mapped[int] = mapped_column(Integer, primary_key=True)
   uuid: Mapped[str] = mapped_column(String(36), nullable=False, unique=True, index=True, default=lambda: str(uuid.uuid4()))
+  payment_id: Mapped[int | None] = mapped_column(ForeignKey("payments.id"), nullable=True, index=True)
   product_ids: Mapped[list[int]] = mapped_column(JSON, nullable=False)
   properties: Mapped[dict[str, list[str]]] = mapped_column(JSON, nullable=False, default=dict)
   product_quantities: Mapped[dict[str, int]] = mapped_column(JSON, nullable=False, default=dict)
@@ -42,6 +43,7 @@ class Purchase(Base):
     default=PurchaseStatus.CREATED,
     server_default=PurchaseStatus.CREATED.name,
   )
+  payment: Mapped["Payment | None"] = relationship("Payment", lazy="selectin")
 
   def __init__(
     self,
@@ -52,12 +54,14 @@ class Purchase(Base):
     contact_info: dict,
     final_price: int,
     payment_method: str,
+    payment_id: int | None = None,
     purchase_uuid: str | None = None,
     payment_status: PaymentStatus | str = PaymentStatus.PENDING,
     status: PurchaseStatus | str = PurchaseStatus.CREATED,
     **kwargs,
   ) -> None:
     self.uuid = purchase_uuid or str(uuid.uuid4())
+    self.payment_id = payment_id
     self.product_ids = product_ids
     self.properties = properties
     self.product_quantities = product_quantities
@@ -83,7 +87,7 @@ class Purchase(Base):
   @property
   def json(self) -> dict:
     return dict(
-      id=self.id, uuid=self.uuid, product_ids=self.product_ids,
+      id=self.id, uuid=self.uuid, payment_id=self.payment_id, product_ids=self.product_ids,
       properties=self.properties, product_quantities=self.product_quantities,
       quantity=self.quantity, contact_info=self.contact_info, final_price=self.final_price,
       payment_method=self.payment_method, payment_status=self.payment_status.value, status=self.status.value,

@@ -24,6 +24,16 @@ _SUCCESS_WRAP_EXCLUDED_PATHS = {"/openapi.json", "/docs", "/docs/oauth2-redirect
 SECURED = '/api'
 ACTION_LOGGING_PREFIXES = ("/api",)
 actions_logger = get_actions_logger()
+PUBLIC_API_ROUTES = {
+  ("POST", "/api/purchases"),
+  ("POST", "/api/purchases/"),
+}
+
+
+def _is_public_api_route(method: str, path: str) -> bool:
+  if (method, path) in PUBLIC_API_ROUTES:
+    return True
+  return method == "GET" and path.startswith("/api/purchases/by-uuid/")
 
 
 def _client_ip(request: Request) -> str:
@@ -36,6 +46,9 @@ def _client_ip(request: Request) -> str:
 @app.middleware("http")
 async def jwt_auth_middleware(request: Request, call_next):
   if request.method == "OPTIONS" or not request.url.path.startswith(SECURED):
+    return await call_next(request)
+
+  if _is_public_api_route(request.method, request.url.path):
     return await call_next(request)
 
   token = extract_bearer_token(request.headers.get("authorization"))

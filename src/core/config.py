@@ -17,6 +17,10 @@ class Settings(BaseSettings):
   SECRET_KEY: str = "change-me"
   JWT_TOKEN_EXPIRES: int = 86400
   JWT_REFRESH_TOKEN_EXPIRES: int = 604800
+  YOOKASSA_SHOP_ID: str | None = None
+  YOOKASSA_SECRET_KEY: str | None = None
+  YOOKASSA_RETURN_URL: str | None = None
+  YOOKASSA_API_URL: str = "https://api.yookassa.ru/v3"
 
   model_config = SettingsConfigDict(
     # src/core/config.py -> src/.env
