@@ -21,12 +21,13 @@ class PurchaseCreateRequest(BaseModel):
   payment: str
   phone: str
   price: int = Field(ge=0)
-
+  username: str | None = None
 
 class PurchaseContactInfo(BaseModel):
   name: str
   phone: str
   delivery: str
+  username: str | None = None
 
 
 class PurchasePatchRequest(BaseModel):
@@ -60,15 +61,33 @@ class PurchaseProductItem(BaseModel):
   properties: list[PurchasePropertyItem]
 
 
+class PurchasePaymentInfo(BaseModel):
+  id: int
+  uuid: str
+  provider: str
+  idempotency_key: str
+  external_payment_id: str | None
+  status: str
+  amount_value: str
+  currency: str
+  paid: bool
+  confirmation_url: str | None
+  return_url: str | None
+  created_ts: int
+  updated_ts: int
+
+
 class PurchaseItem(BaseModel):
   id: int
   uuid: str
+  payment_id: int | None
   products: list[PurchaseProductItem]
   quantity: int
   contact_info: PurchaseContactInfo
   final_price: int
   payment_method: str
   payment_status: PaymentStatus
+  payment: PurchasePaymentInfo | None
   status: PurchaseStatus
   created_ts: int
   updated_ts: int
@@ -80,3 +99,23 @@ class PurchaseResponse(PurchaseItem):
 
 class PurchasesResponse(BaseModel):
   items: list[PurchaseItem]
+
+
+class PurchaseTrackingPaymentInfo(BaseModel):
+  status: str
+  amount_value: str
+  currency: str
+  paid: bool
+  confirmation_url: str | None
+
+
+class PurchaseTrackingPurchaseInfo(BaseModel):
+  id: int
+  created_ts: int
+  payment_method: str
+  contact_info: PurchaseContactInfo
+
+
+class PurchaseTrackingResponse(BaseModel):
+  purchase: PurchaseTrackingPurchaseInfo
+  payment: PurchaseTrackingPaymentInfo | None
