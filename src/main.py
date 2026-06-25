@@ -25,6 +25,9 @@ _SUCCESS_WRAP_EXCLUDED_PATHS = {"/openapi.json", "/docs", "/docs/oauth2-redirect
 SECURED = '/api'
 ACTION_LOGGING_PREFIXES = ("/api",)
 actions_logger = get_actions_logger()
+BODY_LOG_PREVIEW_LIMIT = 500
+BODY_LOG_CAPTURE_LIMIT = 64 * 1024
+SENSITIVE_BODY_KEYS = {"authorization", "password", "token", "access_token", "refresh_token" }
 PUBLIC_API_ROUTES = {
   ("POST", "/api/purchases"),
   ("POST", "/api/purchases/"),
