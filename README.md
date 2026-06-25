@@ -123,6 +123,7 @@ Optional 1C exchange endpoints (`ONEC_ENABLED=1`):
 - HTTP action log file: `logs/actions.log`
 - `GET /api/logs/` returns the last 100 lines from the current log file
 - `GET /api/logs/?all` returns the whole current log file
+- Each API request writes short `incoming` and `outgoing` entries with compact body previews
 - Business change feed for frontend "last changes": `GET /api/changes/?locale=en&limit=20`
 
 Compatibility note:
