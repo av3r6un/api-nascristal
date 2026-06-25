@@ -1,6 +1,7 @@
 from .user import User
 from .feedback import Feedback
-from .purchase import PaymentStatus, Purchase, PurchaseStatus
+from .payment import Payment, PaymentProvider, PaymentStatus
+from .purchase import Purchase, PurchaseStatus
 from .locale_overrides import LocaleOverride
 from .static import StaticPage, StaticPagesTranslation
 from .settings import Setting
