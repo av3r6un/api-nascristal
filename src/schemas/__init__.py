@@ -4,6 +4,7 @@ from .category import CategoriesPatchRequest, CategoriesResponse
 from .change_event import ChangeEventsResponse, LastUpdateResponse
 from .feedback import FeedbackResponse, FeedbackRequest
 from .i18n import I18nPatchResponse
+from .payment import PaymentInfo, PaymentResponse
 from .product import ProductsResponse
 from .purchase import PurchaseCreateRequest, PurchasePatchRequest, PurchaseResponse, PurchasesResponse
 from .property_option import PropertyOptionsPatchRequest, PropertyOptionsResponse
