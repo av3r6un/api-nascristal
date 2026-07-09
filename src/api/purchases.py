@@ -1,4 +1,5 @@
 import uuid
+from decimal import Decimal, ROUND_HALF_UP
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
@@ -8,23 +9,41 @@ from sqlalchemy.orm import selectinload
 from src.core.config import settings
 from src.core.database import get_db
 from src.exceptions import JSRError
-from src.models import Payment, Product, ProductAttribute, PropertyOption, Purchase
+from src.models import Payment, Product, ProductAttribute, PropertyOption, Purchase, PurchaseStatus
 from src.models.payment import PaymentStatus as ProviderPaymentStatus
-from src.models.purchase import PaymentStatus as PurchasePaymentStatus
-from src.schemas.purchase import PurchaseCreateRequest, PurchasePatchRequest, PurchaseResponse, PurchasesResponse, PurchaseTrackingResponse
+from src.schemas.contact import normalize_contact_info, normalize_delivery_info
+from src.schemas.purchase import (
+  PurchaseCreateRequest,
+  PurchaseDeliveryPatchRequest,
+  PurchaseResponse,
+  PurchasesResponse,
+  PurchaseTrackingResponse,
+)
 from src.services.payment_sync import refresh_payment_state
-from src.services.yookassa import build_purchase_return_url, build_yookassa_payment_payload, create_yookassa_payment
+from src.services.yookassa import (
+  build_purchase_return_url,
+  build_yookassa_payment_payload,
+  cancel_yookassa_payment,
+  create_yookassa_payment,
+)
 
 
 router = APIRouter(prefix="/api/purchases", tags=["purchases"])
 
+FINAL_PAYMENT_STATUSES = {
+  ProviderPaymentStatus.SUCCEEDED.value,
+  ProviderPaymentStatus.CANCELED.value,
+  ProviderPaymentStatus.FAILED.value,
+}
+
 
 def _contact_info(payload: PurchaseCreateRequest) -> dict:
   return {
-    "name": payload.name,
-    "phone": payload.phone,
-    "delivery": payload.delivery,
-    "username": payload.username,
+    "name": payload.customer.name,
+    "phone": payload.customer.phone,
+    "delivery": payload.delivery.model_dump(),
+    "username": payload.customer.username,
+    "email": payload.customer.email,
   }
 
 
@@ -33,6 +52,7 @@ async def _get_products_or_404(session: AsyncSession, product_ids: list[int]) ->
   query = (
     select(Product)
     .options(selectinload(Product.attributes).selectinload(ProductAttribute.option))
+    .options(selectinload(Product.offers))
     .where(Product.id.in_(unique_product_ids))
   )
   products = (await session.execute(query)).scalars().all()
@@ -81,6 +101,157 @@ def _normalize_quantities_by_product(product_quantities: dict[int, int]) -> dict
   return {str(product_id): quantity for product_id, quantity in product_quantities.items()}
 
 
+def _money(value) -> Decimal:
+  return Decimal(str(value)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
+def _format_money(value: Decimal) -> str:
+  return format(value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP), "f")
+
+
+def _delivery_price(delivery) -> Decimal:
+  return _money(normalize_delivery_info(delivery)["cost"])
+
+
+def _delivery_description(delivery) -> str:
+  normalized_delivery = normalize_delivery_info(delivery)
+  if not normalized_delivery["type"] and not normalized_delivery["address"]:
+    return settings.YOOKASSA_RECEIPT_DELIVERY_DESCRIPTION
+
+  description = " ".join(
+    value
+    for value in (normalized_delivery["type"], normalized_delivery["address"])
+    if value
+  )
+  return (description or settings.YOOKASSA_RECEIPT_DELIVERY_DESCRIPTION)[:128]
+
+
+def _primary_offer(product: Product):
+  active_offers = [offer for offer in product.offers if offer.is_active]
+  if not active_offers:
+    raise JSRError("bad_request", message=f"Active offer not found for product {product.id}")
+  return sorted(active_offers, key=lambda offer: offer.id)[0]
+
+
+def _price_int(value: Decimal) -> int:
+  integer_value = value.to_integral_value(rounding=ROUND_HALF_UP)
+  if value != integer_value:
+    raise JSRError("bad_request", message=f"Purchase total {value} must be a whole number")
+  return int(integer_value)
+
+
+def _build_receipt_for_purchase(
+  *,
+  customer_email: str | None,
+  delivery,
+  price: int,
+  products_by_id: dict[int, Product],
+  quantities_by_product: dict[int, int],
+) -> dict:
+  if not customer_email:
+    raise JSRError("bad_request", message="Customer email is required for card payment receipt")
+
+  items = []
+  total = Decimal("0.00")
+  for product_id, quantity in quantities_by_product.items():
+    product = products_by_id.get(product_id)
+    if product is None:
+      raise JSRError("not_found", message=f"Product not found: {product_id}")
+
+    offer = _primary_offer(product)
+    unit_amount = _money(offer.amount)
+    total += unit_amount * quantity
+    items.append({
+      "description": product.name[:128],
+      "quantity": quantity,
+      "amount": {
+        "value": _format_money(unit_amount),
+        "currency": "RUB",
+      },
+      "vat_code": settings.YOOKASSA_RECEIPT_VAT_CODE,
+      "payment_mode": settings.YOOKASSA_RECEIPT_PAYMENT_MODE,
+      "payment_subject": settings.YOOKASSA_RECEIPT_PAYMENT_SUBJECT,
+    })
+
+  delivery_amount = _delivery_price(delivery)
+  if delivery_amount > 0:
+    total += delivery_amount
+    items.append({
+      "description": _delivery_description(delivery),
+      "quantity": 1,
+      "amount": {
+        "value": _format_money(delivery_amount),
+        "currency": "RUB",
+      },
+      "vat_code": settings.YOOKASSA_RECEIPT_VAT_CODE,
+      "payment_mode": settings.YOOKASSA_RECEIPT_PAYMENT_MODE,
+      "payment_subject": settings.YOOKASSA_RECEIPT_DELIVERY_PAYMENT_SUBJECT,
+    })
+
+  expected_total = _money(price)
+  if total != expected_total:
+    raise JSRError(
+      "bad_request",
+      message=f"Receipt items total {total} does not match payment price {expected_total}",
+    )
+
+  return {
+    "customer": {
+      "email": customer_email,
+    },
+    "items": items,
+  }
+
+
+def _build_receipt(payload: PurchaseCreateRequest, products_by_id: dict[int, Product], quantities_by_product: dict[int, int]) -> dict:
+  return _build_receipt_for_purchase(
+    customer_email=payload.customer.email,
+    delivery=payload.delivery,
+    price=payload.price,
+    products_by_id=products_by_id,
+    quantities_by_product=quantities_by_product,
+  )
+
+
+def _calculate_purchase_total(products_by_id: dict[int, Product], quantities_by_product: dict[int, int], delivery) -> Decimal:
+  total = Decimal("0.00")
+  for product_id, quantity in quantities_by_product.items():
+    product = products_by_id.get(product_id)
+    if product is None:
+      raise JSRError("not_found", message=f"Product not found: {product_id}")
+    total += _money(_primary_offer(product).amount) * quantity
+  return total + _delivery_price(delivery)
+
+
+def _purchase_quantities_as_ints(purchase: Purchase) -> dict[int, int]:
+  return {int(product_id): int(quantity) for product_id, quantity in purchase.product_quantities.items()}
+
+
+def _payment_fingerprint(
+  *,
+  contact_info: dict,
+  delivery,
+  products_by_id: dict[int, Product],
+  quantities_by_product: dict[int, int],
+) -> dict:
+  normalized_delivery = normalize_delivery_info(delivery)
+  return {
+    "email": contact_info.get("email") or "",
+    "delivery_type": normalized_delivery["type"],
+    "delivery_cost": normalized_delivery["cost"],
+    "items": tuple(
+      sorted(
+        (
+          product_id,
+          quantity,
+          _price_int(_money(_primary_offer(products_by_id[product_id]).amount)),
+        )
+        for product_id, quantity in quantities_by_product.items()
+      )
+    ),
+  }
+
+
 def _collect_property_eids(properties: dict[str, list[str]]) -> list[str]:
   return [
     option_eid
@@ -96,7 +267,6 @@ def _serialize_payment(payment: Payment | None) -> dict | None:
   return {
     "id": payment.id,
     "uuid": payment.uuid,
-    "purchase": None,
     "provider": payment.provider,
     "idempotency_key": payment.idempotency_key,
     "external_payment_id": payment.external_payment_id,
@@ -112,12 +282,21 @@ def _serialize_payment(payment: Payment | None) -> dict | None:
 
 
 def _serialize_purchase_tracking(payment: Payment | None, purchase: Purchase) -> dict:
+  contact_info = normalize_contact_info(purchase.contact_info)
+  delivery_price = _delivery_price(contact_info.get("delivery"))
+  price_without_delivery = _money(purchase.final_price) - delivery_price
+  price_payload = (
+    {"final_price": purchase.final_price}
+    if delivery_price > 0
+    else {"price": _price_int(price_without_delivery)}
+  )
   return {
     "purchase": {
       "id": purchase.id,
       "created_ts": purchase.created_ts,
-      "payment_method": purchase.payment_method,
-      "contact_info": purchase.contact_info,
+      **price_payload,
+      "status": purchase.status.value,
+      "contact_info": contact_info,
     },
     "payment": (
       {
@@ -136,7 +315,11 @@ async def _load_product_map(session: AsyncSession, product_ids: list[int]) -> di
   if not product_ids:
     return {}
 
-  result = await session.execute(select(Product).where(Product.id.in_(product_ids)))
+  result = await session.execute(
+    select(Product)
+    .options(selectinload(Product.offers))
+    .where(Product.id.in_(product_ids))
+  )
   return {product.id: product for product in result.scalars().all()}
 
 
@@ -167,38 +350,45 @@ def _serialize_purchase(
   options_by_eid: dict[str, PropertyOption],
   payments_by_id: dict[int, Payment],
 ) -> dict:
+  payment = payments_by_id.get(purchase.payment_id) if purchase.payment_id is not None else None
+
+  def serialize_product(product_id: int, product: Product) -> dict:
+    offer = _primary_offer(product)
+    return {
+      "id": product.id,
+      "sku": product.sku,
+      "name": product.name,
+      "price": _price_int(_money(offer.amount)),
+      "quantity": {
+        "value": purchase.product_quantities.get(str(product_id), 0),
+        "max": int(offer.quantity),
+      },
+      "properties": [
+        {
+          "value": option.value,
+          "name": option.name,
+          "property": {
+            "id": option.property.id,
+            "name": option.property.name,
+          },
+        }
+        for option_eid in purchase.properties.get(str(product_id), [])
+        if (option := options_by_eid.get(option_eid)) is not None and option.property is not None
+      ],
+    }
+
+  contact_info = normalize_contact_info(purchase.contact_info)
   return {
     "id": purchase.id,
     "uuid": purchase.uuid,
     "payment_id": purchase.payment_id,
     "products": [
-      {
-        "id": product.id,
-        "sku": product.sku,
-        "name": product.name,
-        "quantity": purchase.product_quantities.get(str(product_id), 0),
-        "properties": [
-          {
-            "value": option.value,
-            "name": option.name,
-            "property": {
-              "id": option.property.id,
-              "name": option.property.name,
-            },
-          }
-          for option_eid in purchase.properties.get(str(product_id), [])
-          if (option := options_by_eid.get(option_eid)) is not None and option.property is not None
-        ],
-      }
+      serialize_product(product_id, product)
       for product_id in purchase.product_ids
       if (product := products_by_id.get(product_id)) is not None
     ],
-    "quantity": purchase.quantity,
-    "contact_info": purchase.contact_info,
-    "final_price": purchase.final_price,
-    "payment_method": purchase.payment_method,
-    "payment_status": purchase.payment_status.value,
-    "payment": _serialize_payment(payments_by_id.get(purchase.payment_id) if purchase.payment_id is not None else None),
+    "contact_info": contact_info,
+    "payment": _serialize_payment(payment),
     "status": purchase.status.value,
     "created_ts": purchase.created_ts,
     "updated_ts": purchase.updated_ts,
@@ -226,6 +416,115 @@ async def _get_purchase_by_uuid_or_404(session: AsyncSession, purchase_uuid: str
   return purchase
 
 
+async def _cancel_payment_for_purchase(payment: Payment | None) -> None:
+  if payment is None or payment.status in FINAL_PAYMENT_STATUSES:
+    return
+
+  if payment.external_payment_id:
+    provider_payment = await cancel_yookassa_payment(
+      idempotency_key=f"cancel-{payment.uuid}"[:64],
+      external_payment_id=payment.external_payment_id,
+    )
+    payment.status = provider_payment.get("status", ProviderPaymentStatus.CANCELED.value)
+    payment.paid = bool(provider_payment.get("paid", False))
+    payment.confirmation_url = (provider_payment.get("confirmation") or {}).get("confirmation_url")
+    payment.response_payload = provider_payment
+  else:
+    payment.status = ProviderPaymentStatus.CANCELED.value
+    payment.paid = False
+    payment.confirmation_url = None
+    payment.response_payload = {"status": ProviderPaymentStatus.CANCELED.value}
+
+
+async def _create_card_payment_for_purchase(
+  *,
+  session: AsyncSession,
+  purchase: Purchase,
+  products_by_id: dict[int, Product],
+  quantities_by_product: dict[int, int],
+) -> Payment:
+  base_return_url = settings.YOOKASSA_RETURN_URL
+  if not base_return_url:
+    raise JSRError(status=500, message="YooKassa return URL is not configured")
+
+  return_url = build_purchase_return_url(base_return_url, purchase.uuid)
+  amount_value = _format_money(_money(purchase.final_price))
+  payment = await Payment.first(session, id=purchase.payment_id) if purchase.payment_id is not None else None
+  if payment is not None and payment.status == ProviderPaymentStatus.SUCCEEDED.value:
+    return payment
+  if (
+    payment is not None
+    and payment.status not in FINAL_PAYMENT_STATUSES
+    and payment.amount_value == amount_value
+    and payment.confirmation_url
+  ):
+    return payment
+
+  contact_info = normalize_contact_info(purchase.contact_info)
+  customer_name = contact_info.get("name") or purchase.uuid
+  delivery = contact_info.get("delivery")
+
+  should_reuse_payment = (
+    payment is not None
+    and payment.status not in FINAL_PAYMENT_STATUSES
+    and payment.amount_value == amount_value
+  )
+  if not should_reuse_payment:
+    idempotency_key = f"purchase-{purchase.uuid}"[:64] if payment is None else f"purchase-{purchase.uuid[:8]}-{uuid.uuid4()}"[:64]
+    payment = Payment(
+      idempotency_key=idempotency_key,
+      amount_value=amount_value,
+      return_url=return_url,
+      description=f"Purchase {customer_name}",
+    )
+    session.add(payment)
+    await session.flush()
+    purchase.payment_id = payment.id
+  else:
+    idempotency_key = payment.idempotency_key
+    payment.return_url = return_url
+    payment.description = f"Purchase {customer_name}"
+
+  payment_payload = build_yookassa_payment_payload(
+    price=purchase.final_price,
+    description=f"Purchase #{purchase.id}",
+    return_url=return_url,
+    metadata={
+      "purchase_id": str(purchase.id),
+      "purchase_uuid": purchase.uuid,
+      "payment_id": str(payment.id),
+    },
+    receipt=_build_receipt_for_purchase(
+      customer_email=contact_info.get("email"),
+      delivery=delivery,
+      price=purchase.final_price,
+      products_by_id=products_by_id,
+      quantities_by_product=quantities_by_product,
+    ),
+  )
+  payment.description = payment_payload["description"]
+  payment.payment_metadata = payment_payload["metadata"]
+  payment.request_payload = payment_payload
+
+  try:
+    provider_payment = await create_yookassa_payment(
+      idempotency_key=idempotency_key,
+      payload=payment_payload,
+    )
+  except JSRError:
+    payment.status = ProviderPaymentStatus.FAILED.value
+    payment.response_payload = {"error": "payment_creation_failed"}
+    await session.commit()
+    raise
+
+  payment.external_payment_id = provider_payment.get("id")
+  payment.status = provider_payment.get("status", ProviderPaymentStatus.PENDING.value)
+  payment.paid = bool(provider_payment.get("paid", False))
+  payment.confirmation_url = (provider_payment.get("confirmation") or {}).get("confirmation_url")
+  payment.response_payload = provider_payment
+  return payment
+
+
 @router.post("/", response_model=PurchaseResponse, status_code=200)
 async def create_purchase(payload: PurchaseCreateRequest, session: AsyncSession = Depends(get_db)) -> dict:
   product_ids = [item.id for item in payload.items]
@@ -245,66 +544,8 @@ async def create_purchase(payload: PurchaseCreateRequest, session: AsyncSession 
     quantity=sum(item.quantity.value for item in payload.items),
     contact_info=contact_info,
     final_price=payload.price,
-    payment_method=payload.payment,
   )
   session.add(purchase)
-  await session.flush()
-
-  if payload.payment == "card":
-    idempotency_key = str(uuid.uuid4())
-    base_return_url = settings.YOOKASSA_RETURN_URL
-    if not base_return_url:
-      raise JSRError(status=500, message="YooKassa return URL is not configured")
-
-    return_url = build_purchase_return_url(base_return_url, purchase.uuid)
-    payment = Payment(
-      idempotency_key=idempotency_key,
-      amount_value=f"{payload.price:.2f}",
-      return_url=return_url,
-      description=f"Purchase {payload.name}",
-    )
-    session.add(payment)
-    await session.flush()
-    purchase.payment_id = payment.id
-
-    payment_payload = build_yookassa_payment_payload(
-      price=payload.price,
-      description=f"Purchase #{purchase.id}",
-      return_url=return_url,
-      metadata={
-        "purchase_id": str(purchase.id),
-        "purchase_uuid": purchase.uuid,
-        "payment_id": str(payment.id),
-      },
-    )
-    payment.description = payment_payload["description"]
-    payment.payment_metadata = payment_payload["metadata"]
-    payment.request_payload = payment_payload
-
-    try:
-      provider_payment = await create_yookassa_payment(
-        idempotency_key=idempotency_key,
-        payload=payment_payload,
-      )
-    except JSRError:
-      payment.status = ProviderPaymentStatus.FAILED.value
-      payment.response_payload = {"error": "payment_creation_failed"}
-      purchase.payment_status = PurchasePaymentStatus.FAILED
-      await session.commit()
-      raise
-
-    payment.external_payment_id = provider_payment.get("id")
-    payment.status = provider_payment.get("status", ProviderPaymentStatus.PENDING.value)
-    payment.paid = bool(provider_payment.get("paid", False))
-    payment.confirmation_url = (provider_payment.get("confirmation") or {}).get("confirmation_url")
-    payment.response_payload = provider_payment
-    purchase.payment_status = (
-      PurchasePaymentStatus.PAID
-      if payment.status == ProviderPaymentStatus.SUCCEEDED.value
-      else PurchasePaymentStatus.FAILED if payment.status in {ProviderPaymentStatus.CANCELED.value, ProviderPaymentStatus.FAILED.value}
-      else PurchasePaymentStatus.PENDING
-    )
-
   await session.commit()
   await session.refresh(purchase)
   return await _serialize_purchase_with_refs(session, purchase)
@@ -334,53 +575,155 @@ async def get_purchases(session: AsyncSession = Depends(get_db)) -> dict[str, li
   return {"items": [_serialize_purchase(purchase, products_by_id, options_by_eid, payments_by_id) for purchase in purchases]}
 
 
+@router.get("/by-uuid/{purchase_uuid}", response_model=PurchaseTrackingResponse, response_model_exclude_none=True, status_code=200)
+async def get_purchase_by_uuid(purchase_uuid: str, session: AsyncSession = Depends(get_db)) -> dict:
+  purchase = await _get_purchase_by_uuid_or_404(session, purchase_uuid)
+  payment = await Payment.first(session, id=purchase.payment_id) if purchase.payment_id is not None else None
+  if payment is not None and purchase.status == PurchaseStatus.AWAITING_PAYMENT:
+    payment = await refresh_payment_state(session, payment, purchase)
+    if payment.status == ProviderPaymentStatus.SUCCEEDED.value or payment.paid:
+      purchase.status = PurchaseStatus.DELIVERING
+      await session.commit()
+      await session.refresh(purchase)
+  return _serialize_purchase_tracking(payment, purchase)
+
+
+@router.post("/by-uuid/{purchase_uuid}/payment", response_model=PurchaseTrackingResponse, response_model_exclude_none=True, status_code=200)
+async def create_purchase_payment_by_uuid(purchase_uuid: str, session: AsyncSession = Depends(get_db)) -> dict:
+  purchase = await _get_purchase_by_uuid_or_404(session, purchase_uuid)
+  payment = await Payment.first(session, id=purchase.payment_id) if purchase.payment_id is not None else None
+  if payment is not None:
+    payment = await refresh_payment_state(session, payment, purchase)
+
+  if payment is not None and payment.status == ProviderPaymentStatus.SUCCEEDED.value:
+    return _serialize_purchase_tracking(payment, purchase)
+  if purchase.status != PurchaseStatus.AWAITING_PAYMENT:
+    raise JSRError("bad_request", message="Purchase is not awaiting payment")
+
+  quantities_by_product = _purchase_quantities_as_ints(purchase)
+  products = await _get_products_or_404(session, purchase.product_ids)
+  products_by_id = {product.id: product for product in products}
+  payment = await _create_card_payment_for_purchase(
+    session=session,
+    purchase=purchase,
+    products_by_id=products_by_id,
+    quantities_by_product=quantities_by_product,
+  )
+
+  await session.commit()
+  await session.refresh(purchase)
+  await session.refresh(payment)
+  return _serialize_purchase_tracking(payment, purchase)
+
+
 @router.get("/{purchase_id}", response_model=PurchaseResponse, status_code=200)
 async def get_purchase(purchase_id: int, session: AsyncSession = Depends(get_db)) -> dict:
   purchase = await _get_purchase_or_404(session, purchase_id)
   return await _serialize_purchase_with_refs(session, purchase)
 
 
-@router.get("/by-uuid/{purchase_uuid}", response_model=PurchaseTrackingResponse, status_code=200)
-async def get_purchase_by_uuid(purchase_uuid: str, session: AsyncSession = Depends(get_db)) -> dict:
-  purchase = await _get_purchase_by_uuid_or_404(session, purchase_uuid)
-  payment = await Payment.first(session, id=purchase.payment_id) if purchase.payment_id is not None else None
-  if payment is not None:
-    payment = await refresh_payment_state(session, payment, purchase)
-  return _serialize_purchase_tracking(payment, purchase)
-
-
 @router.patch("/{purchase_id}", response_model=PurchaseResponse, status_code=200)
 async def update_purchase(
   purchase_id: int,
-  payload: PurchasePatchRequest,
+  payload: PurchaseDeliveryPatchRequest,
   session: AsyncSession = Depends(get_db),
 ) -> dict:
   purchase = await _get_purchase_or_404(session, purchase_id)
-  updates = payload.model_dump(exclude_unset=True)
+  if payload.products is not None:
+    product_ids = [item.id for item in payload.products]
+    quantities_by_product: dict[int, int] = {}
+    properties_by_product: dict[int, list[str]] = {}
+    for item in payload.products:
+      quantities_by_product[item.id] = quantities_by_product.get(item.id, 0) + item.quantity.value
+      properties_by_product.setdefault(item.id, []).extend(property_item.value for property_item in item.properties)
+  else:
+    product_ids = purchase.product_ids
+    quantities_by_product = _purchase_quantities_as_ints(purchase)
+    properties_by_product = {
+      int(product_id): option_eids
+      for product_id, option_eids in purchase.properties.items()
+    }
 
-  product_ids = updates.get("product_ids", purchase.product_ids)
-  products = await _get_products_or_404(session, product_ids)
+  old_quantities_by_product = _purchase_quantities_as_ints(purchase)
+  products = await _get_products_or_404(session, list(dict.fromkeys([*purchase.product_ids, *product_ids])))
   products_by_id = {product.id: product for product in products}
+  old_contact_info = normalize_contact_info(purchase.contact_info)
+  old_fingerprint = _payment_fingerprint(
+    contact_info=old_contact_info,
+    delivery=old_contact_info["delivery"],
+    products_by_id=products_by_id,
+    quantities_by_product=old_quantities_by_product,
+  )
+  contact_info = (
+    normalize_contact_info(payload.contact_info.model_dump())
+    if payload.contact_info is not None
+    else normalize_contact_info(purchase.contact_info)
+  )
+  delivery = payload.delivery.model_dump() if payload.delivery is not None else contact_info["delivery"]
+  new_fingerprint = _payment_fingerprint(
+    contact_info=contact_info,
+    delivery=delivery,
+    products_by_id=products_by_id,
+    quantities_by_product=quantities_by_product,
+  )
+  payment_inputs_changed = old_fingerprint != new_fingerprint
 
-  if "product_ids" in updates and updates["product_ids"] is not None:
+  calculated_total = _calculate_purchase_total(products_by_id, quantities_by_product, delivery)
+  calculated_final_price = _price_int(calculated_total)
+  if payload.final_price is not None and payload.final_price != calculated_final_price:
+    raise JSRError(
+      "bad_request",
+      message=f"Final price {payload.final_price} does not match items and delivery total {calculated_final_price}",
+    )
+
+  if payload.products is not None:
     purchase.product_ids = product_ids
-  if "properties" in updates and updates["properties"] is not None:
-    purchase.properties = _resolve_properties_by_product(products_by_id, updates["properties"])
-  if "product_quantities" in updates and updates["product_quantities"] is not None:
-    purchase.product_quantities = _normalize_quantities_by_product(updates["product_quantities"])
-  if "quantity" in updates and updates["quantity"] is not None:
-    purchase.quantity = updates["quantity"]
-  if "contact_info" in updates and updates["contact_info"] is not None:
-    purchase.contact_info = updates["contact_info"]
-  if "final_price" in updates:
-    purchase.final_price = updates["final_price"]
-  if "payment_method" in updates and updates["payment_method"] is not None:
-    purchase.payment_method = updates["payment_method"]
-  if "payment_status" in updates and updates["payment_status"] is not None:
-    purchase.payment_status = updates["payment_status"]
-  if "status" in updates and updates["status"] is not None:
-    purchase.status = updates["status"]
+    purchase.properties = _resolve_properties_by_product(products_by_id, properties_by_product)
+    purchase.product_quantities = _normalize_quantities_by_product(quantities_by_product)
+    purchase.quantity = sum(quantities_by_product.values())
 
+  contact_info["delivery"] = normalize_delivery_info(delivery)
+  purchase.contact_info = contact_info
+  purchase.final_price = payload.final_price if payload.final_price is not None else calculated_final_price
+  existing_payment = await Payment.first(session, id=purchase.payment_id) if purchase.payment_id is not None else None
+  if (
+    purchase.status == PurchaseStatus.AWAITING_PAYMENT
+    and existing_payment is not None
+    and existing_payment.amount_value != _format_money(_money(calculated_final_price))
+  ):
+    payment_inputs_changed = True
+  if (
+    purchase.status == PurchaseStatus.AWAITING_PAYMENT
+    and payment_inputs_changed
+    and existing_payment is not None
+    and existing_payment.status == ProviderPaymentStatus.SUCCEEDED.value
+  ):
+    raise JSRError("bad_request", message="Cannot change payment details for an already paid purchase")
+  if purchase.status == PurchaseStatus.AWAITING_PAYMENT and payment_inputs_changed:
+    await _cancel_payment_for_purchase(existing_payment)
+  purchase.status = PurchaseStatus.AWAITING_PAYMENT
+  # mailing here
+
+  await session.commit()
+  await session.refresh(purchase)
+  return await _serialize_purchase_with_refs(session, purchase)
+
+
+@router.put("/{purchase_id}", response_model=PurchaseResponse, status_code=200)
+async def mark_purchase_delivering(purchase_id: int, session: AsyncSession = Depends(get_db)) -> dict:
+  purchase = await _get_purchase_or_404(session, purchase_id)
+  purchase.status = PurchaseStatus.DELIVERING
+  # mailing here
+  await session.commit()
+  await session.refresh(purchase)
+  return await _serialize_purchase_with_refs(session, purchase)
+
+
+@router.post("/{purchase_id}", response_model=PurchaseResponse, status_code=200)
+async def finish_purchase(purchase_id: int, session: AsyncSession = Depends(get_db)) -> dict:
+  purchase = await _get_purchase_or_404(session, purchase_id)
+  purchase.status = PurchaseStatus.FINISHED
+  # mailing here
   await session.commit()
   await session.refresh(purchase)
   return await _serialize_purchase_with_refs(session, purchase)

@@ -7,14 +7,9 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from .base import Base
 
 
-class PaymentStatus(enum.Enum):
-  PENDING = "pending"
-  PAID = "paid"
-  FAILED = "failed"
-
-
 class PurchaseStatus(enum.Enum):
   CREATED = "created"
+  AWAITING_PAYMENT = "awaiting_payment"
   PROCESSING = "processing"
   DELIVERING = "delivering"
   FINISHED = "finished"
@@ -30,13 +25,6 @@ class Purchase(Base):
   quantity: Mapped[int] = mapped_column(Integer, nullable=False)
   contact_info: Mapped[dict] = mapped_column(JSON, nullable=False)
   final_price: Mapped[int] = mapped_column(Integer, nullable=False)
-  payment_method: Mapped[str] = mapped_column(String(50), nullable=False)
-  payment_status: Mapped[PaymentStatus] = mapped_column(
-    Enum(PaymentStatus),
-    nullable=False,
-    default=PaymentStatus.PENDING,
-    server_default=PaymentStatus.PENDING.name,
-  )
   status: Mapped[PurchaseStatus] = mapped_column(
     Enum(PurchaseStatus),
     nullable=False,
@@ -53,10 +41,8 @@ class Purchase(Base):
     quantity: int,
     contact_info: dict,
     final_price: int,
-    payment_method: str,
     payment_id: int | None = None,
     purchase_uuid: str | None = None,
-    payment_status: PaymentStatus | str = PaymentStatus.PENDING,
     status: PurchaseStatus | str = PurchaseStatus.CREATED,
     **kwargs,
   ) -> None:
@@ -68,8 +54,6 @@ class Purchase(Base):
     self.quantity = quantity
     self.contact_info = contact_info
     self.final_price = final_price
-    self.payment_method = payment_method
-    self.payment_status = self._coerce_payment_status(payment_status)
     self.status = self._coerce_status(status)
 
   @staticmethod
@@ -78,18 +62,11 @@ class Purchase(Base):
       return status
     return PurchaseStatus(status)
 
-  @staticmethod
-  def _coerce_payment_status(payment_status: PaymentStatus | str) -> PaymentStatus:
-    if isinstance(payment_status, PaymentStatus):
-      return payment_status
-    return PaymentStatus(payment_status)
-
   @property
   def json(self) -> dict:
     return dict(
       id=self.id, uuid=self.uuid, payment_id=self.payment_id, product_ids=self.product_ids,
       properties=self.properties, product_quantities=self.product_quantities,
       quantity=self.quantity, contact_info=self.contact_info, final_price=self.final_price,
-      payment_method=self.payment_method, payment_status=self.payment_status.value, status=self.status.value,
-      created_ts=self.created_ts, updated_ts=self.updated_ts
+      status=self.status.value, created_ts=self.created_ts, updated_ts=self.updated_ts
     )

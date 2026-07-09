@@ -1,24 +1,17 @@
 from pydantic import BaseModel
 
-
-class PaymentPurchaseContactInfo(BaseModel):
-  name: str
-  phone: str
-  delivery: str
-  username: str | None = None
+from src.schemas.contact import ContactInfo
 
 
 class PaymentPurchaseInfo(BaseModel):
   id: int
   created_ts: int
-  payment_method: str
-  contact_info: PaymentPurchaseContactInfo
+  contact_info: ContactInfo
 
 
 class PaymentInfo(BaseModel):
   id: int
   uuid: str
-  purchase: PaymentPurchaseInfo | None
   provider: str
   idempotency_key: str
   external_payment_id: str | None
@@ -32,5 +25,17 @@ class PaymentInfo(BaseModel):
   updated_ts: int
 
 
-class PaymentResponse(PaymentInfo):
+class PaymentWithPurchaseInfo(PaymentInfo):
+  purchase: PaymentPurchaseInfo | None
+
+
+class PaymentResponse(PaymentWithPurchaseInfo):
   pass
+
+
+class PaymentTrackingInfo(BaseModel):
+  status: str
+  amount_value: str
+  currency: str
+  paid: bool
+  confirmation_url: str | None
