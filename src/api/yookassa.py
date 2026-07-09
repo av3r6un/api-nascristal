@@ -5,9 +5,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_db
 from src.exceptions import JSRError
-from src.models import Payment, Purchase
+from src.models import Payment, Purchase, PurchaseStatus
 from src.models.payment import PaymentStatus as ProviderPaymentStatus
-from src.models.purchase import PaymentStatus as PurchasePaymentStatus
+from src.services.yookassa import get_yookassa_payment
 
 
 router = APIRouter(tags=["yookassa"])
@@ -38,15 +38,6 @@ def _is_allowed_yookassa_ip(value: str) -> bool:
   return any(remote_ip in network for network in _YOOKASSA_ALLOWED_IPS)
 
 
-def _map_purchase_payment_status(payment_status: str) -> PurchasePaymentStatus:
-  mapping = {
-    ProviderPaymentStatus.SUCCEEDED.value: PurchasePaymentStatus.PAID,
-    ProviderPaymentStatus.CANCELED.value: PurchasePaymentStatus.FAILED,
-    ProviderPaymentStatus.FAILED.value: PurchasePaymentStatus.FAILED,
-  }
-  return mapping.get(payment_status, PurchasePaymentStatus.PENDING)
-
-
 @router.get("/webhooks/yookassa", status_code=200)
 async def yookassa_webhook_info() -> dict[str, str]:
   return {"method": "POST"}
@@ -58,7 +49,6 @@ async def yookassa_webhook(request: Request, session: AsyncSession = Depends(get
     raise JSRError("forbidden", message="Forbidden source IP")
 
   payload = await request.json()
-  event = payload.get("event")
   object_payload = payload.get("object") or {}
   external_payment_id = object_payload.get("id")
 
@@ -69,20 +59,22 @@ async def yookassa_webhook(request: Request, session: AsyncSession = Depends(get
   if not payment:
     raise JSRError("not_found", message=f"Payment not found: {external_payment_id}")
 
-  payment_status = object_payload.get("status", payment.status)
+  provider_payment = await get_yookassa_payment(external_payment_id)
+  payment_status = provider_payment.get("status", payment.status)
   payment.status = (
     ProviderPaymentStatus(payment_status).value
     if payment_status in {item.value for item in ProviderPaymentStatus}
     else payment.status
   )
-  payment.paid = bool(object_payload.get("paid", payment.paid))
-  payment.confirmation_url = (object_payload.get("confirmation") or {}).get("confirmation_url", payment.confirmation_url)
-  payment.response_payload = object_payload
+  payment.paid = bool(provider_payment.get("paid", payment.paid))
+  payment.confirmation_url = (provider_payment.get("confirmation") or {}).get("confirmation_url", payment.confirmation_url)
+  payment.response_payload = provider_payment
   payment.notification_payload = payload
 
-  purchase = await Purchase.first(session, payment_id=payment.id)
-  if purchase:
-    purchase.payment_status = _map_purchase_payment_status(payment.status)
+  if payment.status == ProviderPaymentStatus.SUCCEEDED.value:
+    purchase = await Purchase.first(session, payment_id=payment.id)
+    if purchase and purchase.status != PurchaseStatus.FINISHED:
+      purchase.status = PurchaseStatus.DELIVERING
 
   await session.commit()
   return Response(status_code=200)

@@ -2,6 +2,7 @@ import json
 from contextlib import asynccontextmanager
 from time import perf_counter
 from typing import Any
+from urllib.parse import parse_qsl, urlencode
 
 from starlette.responses import Response
 from fastapi import FastAPI, Request
@@ -27,17 +28,42 @@ ACTION_LOGGING_PREFIXES = ("/api",)
 actions_logger = get_actions_logger()
 BODY_LOG_PREVIEW_LIMIT = 500
 BODY_LOG_CAPTURE_LIMIT = 64 * 1024
-SENSITIVE_BODY_KEYS = {"authorization", "password", "token", "access_token", "refresh_token" }
-PUBLIC_API_ROUTES = {
-  ("POST", "/api/purchases"),
-  ("POST", "/api/purchases/"),
+SENSITIVE_BODY_KEYS = {
+  "authorization",
+  "password",
+  "token",
+  "access_token",
+  "refresh_token",
+  "secret",
+  "secret_key",
+  "yookassa_secret_key",
+  "email",
+  "phone",
+  "address",
+  "username",
+  "contact_info",
+  "customer",
+  "idempotency_key",
+  "external_payment_id",
+  "confirmation_url",
+  "return_url",
+  "request_payload",
+  "response_payload",
+  "notification_payload",
+  "authorization_details",
+  "payment_method",
+  "card",
+  "first6",
+  "last4",
+  "expiry_month",
+  "expiry_year",
 }
+SENSITIVE_BODY_KEY_FRAGMENTS = ("token", "secret", "password")
 
 
-def _is_public_api_route(method: str, path: str) -> bool:
-  if (method, path) in PUBLIC_API_ROUTES:
-    return True
-  return method == "GET" and path.startswith("/api/purchases/by-uuid/")
+def _is_sensitive_log_key(key: Any) -> bool:
+  normalized_key = str(key).lower()
+  return normalized_key in SENSITIVE_BODY_KEYS or any(fragment in normalized_key for fragment in SENSITIVE_BODY_KEY_FRAGMENTS)
 
 
 def _client_ip(request: Request) -> str:
@@ -50,14 +76,20 @@ def _client_ip(request: Request) -> str:
 def _path_with_query(request: Request) -> str:
   path = str(request.url.path)
   if request.url.query:
-    path = f"{path}?{request.url.query}"
+    sanitized_query = urlencode(
+      [
+        (key, "***" if _is_sensitive_log_key(key) else value)
+        for key, value in parse_qsl(request.url.query, keep_blank_values=True)
+      ]
+    )
+    path = f"{path}?{sanitized_query}"
   return path
 
 
 def _sanitize_log_payload(payload: Any) -> Any:
   if isinstance(payload, dict):
     return {
-      key: "***" if str(key).lower() in SENSITIVE_BODY_KEYS else _sanitize_log_payload(value)
+      key: "***" if _is_sensitive_log_key(key) else _sanitize_log_payload(value)
       for key, value in payload.items()
     }
   if isinstance(payload, list):
@@ -110,9 +142,6 @@ async def _restore_request_body(request: Request, body: bytes) -> None:
 @app.middleware("http")
 async def jwt_auth_middleware(request: Request, call_next):
   if request.method == "OPTIONS" or not request.url.path.startswith(SECURED):
-    return await call_next(request)
-
-  if _is_public_api_route(request.method, request.url.path):
     return await call_next(request)
 
   token = extract_bearer_token(request.headers.get("authorization"))

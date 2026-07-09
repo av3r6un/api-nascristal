@@ -21,6 +21,11 @@ class Settings(BaseSettings):
   YOOKASSA_SECRET_KEY: str | None = None
   YOOKASSA_RETURN_URL: str | None = None
   YOOKASSA_API_URL: str = "https://api.yookassa.ru/v3"
+  YOOKASSA_RECEIPT_VAT_CODE: int = 1
+  YOOKASSA_RECEIPT_PAYMENT_MODE: str = "full_prepayment"
+  YOOKASSA_RECEIPT_PAYMENT_SUBJECT: str = "commodity"
+  YOOKASSA_RECEIPT_DELIVERY_PAYMENT_SUBJECT: str = "service"
+  YOOKASSA_RECEIPT_DELIVERY_DESCRIPTION: str = "Delivery"
 
   model_config = SettingsConfigDict(
     # src/core/config.py -> src/.env

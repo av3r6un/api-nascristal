@@ -1,6 +1,8 @@
 from pydantic import BaseModel, Field
 
-from src.models.purchase import PaymentStatus, PurchaseStatus
+from src.models.purchase import PurchaseStatus
+from src.schemas.contact import ContactInfo, DeliveryInfo
+from src.schemas.payment import PaymentInfo, PaymentTrackingInfo
 
 
 class PurchaseQuantity(BaseModel):
@@ -14,20 +16,20 @@ class PurchaseCreateItem(BaseModel):
   quantity: PurchaseQuantity
 
 
-class PurchaseCreateRequest(BaseModel):
-  delivery: str
-  items: list[PurchaseCreateItem] = Field(min_length=1)
+class PurchaseCustomer(BaseModel):
   name: str
-  payment: str
   phone: str
-  price: int = Field(ge=0)
   username: str | None = None
+  email: str | None = None
 
-class PurchaseContactInfo(BaseModel):
-  name: str
-  phone: str
-  delivery: str
-  username: str | None = None
+
+class PurchaseCreateRequest(BaseModel):
+  customer: PurchaseCustomer
+  delivery: DeliveryInfo
+  items: list[PurchaseCreateItem] = Field(min_length=1)
+  price: int = Field(ge=0)
+
+PurchaseContactInfo = ContactInfo
 
 
 class PurchasePatchRequest(BaseModel):
@@ -37,8 +39,6 @@ class PurchasePatchRequest(BaseModel):
   quantity: int | None = Field(default=None, ge=1)
   contact_info: PurchaseContactInfo | None = None
   final_price: int | None = Field(default=None, ge=0)
-  payment_method: str | None = None
-  payment_status: PaymentStatus | None = None
   status: PurchaseStatus | None = None
 
 
@@ -53,28 +53,29 @@ class PurchasePropertyItem(BaseModel):
   property: PurchasePropertyMeta
 
 
+class PurchasePatchProductItem(BaseModel):
+  id: int
+  sku: str | None = None
+  name: str | None = None
+  price: int | None = Field(default=None, ge=0)
+  quantity: PurchaseQuantity
+  properties: list[PurchasePropertyItem] = Field(default_factory=list)
+
+
+class PurchaseDeliveryPatchRequest(BaseModel):
+  contact_info: PurchaseContactInfo | None = None
+  delivery: DeliveryInfo | None = None
+  products: list[PurchasePatchProductItem] | None = Field(default=None, min_length=1)
+  final_price: int | None = Field(default=None, ge=0)
+
+
 class PurchaseProductItem(BaseModel):
   id: int
   sku: str
   name: str
-  quantity: int
+  price: int
+  quantity: PurchaseQuantity
   properties: list[PurchasePropertyItem]
-
-
-class PurchasePaymentInfo(BaseModel):
-  id: int
-  uuid: str
-  provider: str
-  idempotency_key: str
-  external_payment_id: str | None
-  status: str
-  amount_value: str
-  currency: str
-  paid: bool
-  confirmation_url: str | None
-  return_url: str | None
-  created_ts: int
-  updated_ts: int
 
 
 class PurchaseItem(BaseModel):
@@ -82,12 +83,8 @@ class PurchaseItem(BaseModel):
   uuid: str
   payment_id: int | None
   products: list[PurchaseProductItem]
-  quantity: int
   contact_info: PurchaseContactInfo
-  final_price: int
-  payment_method: str
-  payment_status: PaymentStatus
-  payment: PurchasePaymentInfo | None
+  payment: PaymentInfo | None
   status: PurchaseStatus
   created_ts: int
   updated_ts: int
@@ -101,21 +98,15 @@ class PurchasesResponse(BaseModel):
   items: list[PurchaseItem]
 
 
-class PurchaseTrackingPaymentInfo(BaseModel):
-  status: str
-  amount_value: str
-  currency: str
-  paid: bool
-  confirmation_url: str | None
-
-
 class PurchaseTrackingPurchaseInfo(BaseModel):
   id: int
   created_ts: int
-  payment_method: str
+  price: int | None = None
+  final_price: int | None = None
+  status: PurchaseStatus
   contact_info: PurchaseContactInfo
 
 
 class PurchaseTrackingResponse(BaseModel):
   purchase: PurchaseTrackingPurchaseInfo
-  payment: PurchaseTrackingPaymentInfo | None
+  payment: PaymentTrackingInfo | None
