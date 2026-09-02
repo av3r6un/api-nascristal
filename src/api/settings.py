@@ -7,6 +7,7 @@ from src.exceptions import JSRError
 from src.models import Setting
 from src.models.settings import SettingsKeys
 from src.schemas import SettingsRequest
+from src.services import ServerSettings
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
@@ -28,4 +29,5 @@ async def update_setting(key: str, payload: dict, request: Request, session: Asy
   else:
     await settings.edit(session, key=SettingsKeys(key).name, **payload)
     await record_change(session, "settings.updated", payload={"key": key}, actor_uid=actor_uid)
+  ServerSettings.update(key, settings.value)
   return dict(processed=True)

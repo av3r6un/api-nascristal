@@ -15,9 +15,12 @@ from src.exceptions import JSRError
 from src.utils.auth import extract_bearer_token, user_from_token
 from src.api import routers
 from src.exceptions.base import BaseError
+from src.services import ServerSettings
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+  async with session_maker() as session:
+    await ServerSettings.load(session)
   yield
 
 

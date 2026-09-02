@@ -6,13 +6,13 @@ from .locale_overrides import LocaleOverride
 from .static import StaticPage, StaticPagesTranslation
 from .settings import Setting
 from .change_event import ChangeEvent
-from .onec_catalog import (
+from .products import (
+  Attribute,
+  AttributeOption,
   Category,
   Offer,
-  OneCImportRuns,
   Product,
   ProductAttribute,
   ProductImage,
-  Property,
-  PropertyOption,
+  ProductVariant,
 )

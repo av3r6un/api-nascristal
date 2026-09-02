@@ -14,6 +14,7 @@ class Settings(BaseSettings):
   DB_PORT: int
   DB_NAME: str
 
+  S3_DOMAIN: str
   SECRET_KEY: str = "change-me"
   JWT_TOKEN_EXPIRES: int = 86400
   JWT_REFRESH_TOKEN_EXPIRES: int = 604800
@@ -26,6 +27,7 @@ class Settings(BaseSettings):
   YOOKASSA_RECEIPT_PAYMENT_SUBJECT: str = "commodity"
   YOOKASSA_RECEIPT_DELIVERY_PAYMENT_SUBJECT: str = "service"
   YOOKASSA_RECEIPT_DELIVERY_DESCRIPTION: str = "Delivery"
+  MOYSKLAD_TOKEN: str | None = None
 
   model_config = SettingsConfigDict(
     # src/core/config.py -> src/.env
