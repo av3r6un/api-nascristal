@@ -4,9 +4,16 @@ from .category import CategoriesPatchRequest, CategoriesResponse
 from .change_event import ChangeEventsResponse, LastUpdateResponse
 from .feedback import FeedbackResponse, FeedbackRequest
 from .i18n import I18nPatchResponse
-from .payment import PaymentInfo, PaymentResponse
-from .product import ProductsResponse
-from .purchase import PurchaseCreateRequest, PurchasePatchRequest, PurchaseResponse, PurchasesResponse
+from .moysklad import MoySkladImportResponse
+from .payment import PaymentInfo, PaymentResponse, PaymentTrackingInfo, PaymentWithPurchaseInfo
+from .product import ProductsResponse, ProductsAttributesResponse
+from .purchase import (
+  PurchaseCreateRequest,
+  PurchaseDeliveryPatchRequest,
+  PurchasePatchRequest,
+  PurchaseResponse,
+  PurchasesResponse,
+)
 from .property_option import PropertyOptionsPatchRequest, PropertyOptionsResponse
 from .stock import StockResponse
 from .static import StaticPageResponse, StaticPageRequest, StaticPagesResponse

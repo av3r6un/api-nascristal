@@ -1,6 +1,8 @@
 import json
 from contextlib import asynccontextmanager
 from time import perf_counter
+from typing import Any
+from urllib.parse import parse_qsl, urlencode
 
 from starlette.responses import Response
 from fastapi import FastAPI, Request
@@ -13,9 +15,12 @@ from src.exceptions import JSRError
 from src.utils.auth import extract_bearer_token, user_from_token
 from src.api import routers
 from src.exceptions.base import BaseError
+from src.services import ServerSettings
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+  async with session_maker() as session:
+    await ServerSettings.load(session)
   yield
 
 
@@ -24,16 +29,44 @@ _SUCCESS_WRAP_EXCLUDED_PATHS = {"/openapi.json", "/docs", "/docs/oauth2-redirect
 SECURED = '/api'
 ACTION_LOGGING_PREFIXES = ("/api",)
 actions_logger = get_actions_logger()
-PUBLIC_API_ROUTES = {
-  ("POST", "/api/purchases"),
-  ("POST", "/api/purchases/"),
+BODY_LOG_PREVIEW_LIMIT = 500
+BODY_LOG_CAPTURE_LIMIT = 64 * 1024
+SENSITIVE_BODY_KEYS = {
+  "authorization",
+  "password",
+  "token",
+  "access_token",
+  "refresh_token",
+  "secret",
+  "secret_key",
+  "yookassa_secret_key",
+  "email",
+  "phone",
+  "address",
+  "username",
+  "contact_info",
+  "customer",
+  "idempotency_key",
+  "external_payment_id",
+  "confirmation_url",
+  "return_url",
+  "request_payload",
+  "response_payload",
+  "notification_payload",
+  "authorization_details",
+  "payment_method",
+  "card",
+  "first6",
+  "last4",
+  "expiry_month",
+  "expiry_year",
 }
+SENSITIVE_BODY_KEY_FRAGMENTS = ("token", "secret", "password")
 
 
-def _is_public_api_route(method: str, path: str) -> bool:
-  if (method, path) in PUBLIC_API_ROUTES:
-    return True
-  return method == "GET" and path.startswith("/api/purchases/by-uuid/")
+def _is_sensitive_log_key(key: Any) -> bool:
+  normalized_key = str(key).lower()
+  return normalized_key in SENSITIVE_BODY_KEYS or any(fragment in normalized_key for fragment in SENSITIVE_BODY_KEY_FRAGMENTS)
 
 
 def _client_ip(request: Request) -> str:
@@ -43,12 +76,75 @@ def _client_ip(request: Request) -> str:
   return request.client.host if request.client else "0.0.0.0"
 
 
+def _path_with_query(request: Request) -> str:
+  path = str(request.url.path)
+  if request.url.query:
+    sanitized_query = urlencode(
+      [
+        (key, "***" if _is_sensitive_log_key(key) else value)
+        for key, value in parse_qsl(request.url.query, keep_blank_values=True)
+      ]
+    )
+    path = f"{path}?{sanitized_query}"
+  return path
+
+
+def _sanitize_log_payload(payload: Any) -> Any:
+  if isinstance(payload, dict):
+    return {
+      key: "***" if _is_sensitive_log_key(key) else _sanitize_log_payload(value)
+      for key, value in payload.items()
+    }
+  if isinstance(payload, list):
+    return [_sanitize_log_payload(item) for item in payload]
+  return payload
+
+
+def _short_body(body: bytes, content_type: str) -> str:
+  if not body:
+    return "-"
+
+  if "application/json" in content_type:
+    try:
+      payload = _sanitize_log_payload(json.loads(body))
+      preview = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+      preview = body.decode("utf-8", errors="replace")
+  elif content_type.startswith("text/"):
+    preview = body.decode("utf-8", errors="replace")
+  else:
+    return f"<{len(body)} bytes>"
+
+  preview = " ".join(preview.split())
+  if len(preview) > BODY_LOG_PREVIEW_LIMIT:
+    return f"{preview[:BODY_LOG_PREVIEW_LIMIT]}...<{len(body)} bytes>"
+  return preview
+
+
+def _can_capture_body(response: Response) -> bool:
+  content_type = response.headers.get("content-type", "")
+  if "application/json" not in content_type and not content_type.startswith("text/"):
+    return False
+
+  content_length = response.headers.get("content-length")
+  if content_length is None:
+    return True
+  try:
+    return int(content_length) <= BODY_LOG_CAPTURE_LIMIT
+  except ValueError:
+    return False
+
+
+async def _restore_request_body(request: Request, body: bytes) -> None:
+  async def receive() -> dict:
+    return {"type": "http.request", "body": body, "more_body": False}
+
+  request._receive = receive
+
+
 @app.middleware("http")
 async def jwt_auth_middleware(request: Request, call_next):
   if request.method == "OPTIONS" or not request.url.path.startswith(SECURED):
-    return await call_next(request)
-
-  if _is_public_api_route(request.method, request.url.path):
     return await call_next(request)
 
   token = extract_bearer_token(request.headers.get("authorization"))
@@ -112,9 +208,18 @@ async def actions_logging_middleware(request: Request, call_next):
 
   started_at = perf_counter()
   client_ip = _client_ip(request)
-  path = str(request.url.path)
-  if request.url.query:
-    path = f"{path}?{request.url.query}"
+  path = _path_with_query(request)
+  request_body = await request.body()
+  await _restore_request_body(request, request_body)
+  request_content_type = request.headers.get("content-type", "")
+  actions_logger.info(
+    "incoming method=%s path=%s ip=%s user_uid=%s body=%s",
+    request.method,
+    path,
+    client_ip,
+    getattr(request.state, "user_uid", None) or "-",
+    _short_body(request_body, request_content_type),
+  )
 
   try:
     response = await call_next(request)
@@ -122,7 +227,7 @@ async def actions_logging_middleware(request: Request, call_next):
     duration_ms = round((perf_counter() - started_at) * 1000, 2)
     user_uid = getattr(request.state, "user_uid", None)
     actions_logger.exception(
-      "method=%s path=%s status=500 duration_ms=%.2f ip=%s user_uid=%s",
+      "outgoing method=%s path=%s status=500 duration_ms=%.2f ip=%s user_uid=%s body=-",
       request.method,
       path,
       duration_ms,
@@ -133,14 +238,34 @@ async def actions_logging_middleware(request: Request, call_next):
 
   duration_ms = round((perf_counter() - started_at) * 1000, 2)
   user_uid = getattr(request.state, "user_uid", None)
+  response_content_type = response.headers.get("content-type", "")
+  response_body_preview = "-"
+
+  if _can_capture_body(response):
+    response_body = b""
+    async for chunk in response.body_iterator:
+      response_body += chunk
+
+    response_body_preview = _short_body(response_body, response_content_type)
+    passthrough = Response(
+      content=response_body,
+      status_code=response.status_code,
+      media_type=response.media_type,
+    )
+    for key, value in response.headers.items():
+      if key.lower() != "content-length":
+        passthrough.headers[key] = value
+    response = passthrough
+
   actions_logger.info(
-    "method=%s path=%s status=%s duration_ms=%.2f ip=%s user_uid=%s",
+    "outgoing method=%s path=%s status=%s duration_ms=%.2f ip=%s user_uid=%s body=%s",
     request.method,
     path,
     response.status_code,
     duration_ms,
     client_ip,
     user_uid or "-",
+    response_body_preview,
   )
   return response
 

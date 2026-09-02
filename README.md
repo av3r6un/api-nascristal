@@ -1,131 +1,113 @@
 # nascrystal API
 
-## Stages
+FastAPI backend for the nascrystal storefront and management panel.
 
-- `DEV`: uses SQLite (`sqlite+aiosqlite:///./dev.db`) and is intended for local work/tests.
-- `PROD`: uses MySQL on `localhost:3306` by default.
+## Stack and architecture
 
-`DB_URL` always has priority if explicitly provided.
+- FastAPI with async SQLAlchemy
+- Alembic migrations
+- SQLite for local development, MySQL for production
+- MoySklad as the source of products, variants, sale prices and available stock
+- Local database as the storefront catalog projection
+- Local purchases and payments with YooKassa integration
+- Product image metadata in the database; image objects in S3 and delivery through CDN
 
-## Run
+The storefront never calls MoySklad directly. Catalog data is imported into the
+local `Product`, `ProductVariant`, `Offer`, `Attribute` and `ProductImage` models.
+Categories are managed locally.
 
-```bash
-uv sync
-uv run uvicorn src.main:app --reload
-```
+## Setup and run
 
-Docs: `http://127.0.0.1:8000/docs`
-
-## Docker
-
-Build and run:
-
-```bash
-docker compose up --build -d
-```
-
-API entrypoint: `http://127.0.0.1:8000`
-
-Scale API replicas:
-
-```bash
-docker compose up --build -d --scale api=3
-```
-
-Stop stack:
-
-```bash
-docker compose down
-```
-
-## Alembic (migrations)
-
-Create migration:
-
-```bash
-uv run alembic revision --autogenerate -m "your message"
-```
-
-Apply latest migration:
-
-```bash
-uv run alembic upgrade head
-```
-
-Rollback one migration:
-
-```bash
-uv run alembic downgrade -1
-```
-
-PowerShell stage examples:
-
-```powershell
-$env:STAGE="DEV";  uv run alembic upgrade head
-$env:STAGE="PROD"; uv run alembic upgrade head
-```
-
-## Tests (tiny pytest suite)
+Python 3.14+ and [uv](https://docs.astral.sh/uv/) are required.
 
 ```bash
 uv sync --group dev
-uv run pytest -q
+uv run uvicorn src.main:app --reload
 ```
 
-The suite covers:
+- API: `http://127.0.0.1:8000`
+- OpenAPI: `http://127.0.0.1:8000/docs`
+- Health check: `GET /health`
 
-- `GET /health`
-- auth flow: register -> login -> refresh
-- `GET /api/changes`
+Configuration is read from `src/.env`. Important variables:
 
-## Endpoints
+```dotenv
+STAGE=DEV
+DB_URL=sqlite+aiosqlite:///./dev.db
+DB_USER=
+DB_PASS=
+DB_HOST=
+DB_PORT=3306
+DB_NAME=
+SECRET_KEY=
+YOOKASSA_SHOP_ID=
+YOOKASSA_SECRET_KEY=
+YOOKASSA_RETURN_URL=
+```
 
-Public:
+`DB_URL` has priority over the stage-specific connection. Without it, `DEV`
+uses SQLite and `PROD` builds a MySQL URL from `DB_USER`, `DB_PASS`, `DB_HOST`,
+`DB_PORT` and `DB_NAME`.
 
-- `GET /health`
-- `POST /auth/register`
-- `POST /auth/login`
-- `POST /auth/refresh`
+## Database
 
-Protected (`Bearer` token required for `/api/*`):
+```bash
+# Apply migrations
+uv run alembic upgrade head
 
-- `GET /api/catalog/`
-- `GET /api/categories/{locale}`
-- `GET /api/category/{uid}/{locale}`
-- `POST /api/category`
-- `GET /api/colors`
-- `GET /api/color/{id}`
-- `POST /api/color`
-- `GET /api/sizes`
-- `GET /api/size/{id}`
-- `POST /api/size`
-- `GET /api/warehouse/specs?locale=ru|en`
-- `POST /api/feedback/`
-- `GET /api/i18n/{locale}`
-- `GET /api/settings/`
-- `POST /api/settings/{key}`
-- `GET /api/static/?locale=ru|en`
-- `POST /api/static/`
-- `GET /api/static/{slug}/{locale}`
-- `GET /api/changes/?locale=en&limit=20`
-- `GET /api/logs/`
-- `GET /api/logs/?all`
+# Generate a forward migration
+uv run alembic revision --autogenerate -m "your message"
+```
 
-Optional 1C exchange endpoints (`ONEC_ENABLED=1`):
+Existing migration files are immutable; schema changes are added as new forward
+migrations.
 
-- `GET /1c/1c_exchange?type=catalog&mode=checkauth`
-- `GET /1c/1c_exchange?type=catalog&mode=init`
-- `POST /1c/1c_exchange?type=catalog&mode=file&filename=import.xml`
-- `GET /1c/1c_exchange?type=catalog&mode=import&filename=import.xml`
+## API contracts
 
-## Logging
+Pydantic contracts live in `src/schemas/`; generated OpenAPI is the canonical
+HTTP reference. Main endpoint groups:
 
-- HTTP action log file: `logs/actions.log`
-- `GET /api/logs/` returns the last 100 lines from the current log file
-- `GET /api/logs/?all` returns the whole current log file
-- Business change feed for frontend "last changes": `GET /api/changes/?locale=en&limit=20`
+- `/auth/*` — registration, login and token refresh
+- `/api/moysklad/import` — manual MoySklad assortment import
+- `/api/payments` — payments
+- `/api/static`, `/api/i18n`, `/api/settings` — storefront content and settings
+- `/api/feedback`, `/api/logs` — operations and diagnostics
+- `/webhooks/yookassa` — YooKassa notifications
 
-Compatibility note:
+All `/api/*` routes require `Authorization: Bearer <access-token>`. Successful
+JSON responses with status 200 use the common envelope:
 
-- `POST /auth/login` is the primary login endpoint
-- `POST /auth` and `POST /auth/` are also accepted for backward compatibility
+```json
+{"status": "success", "body": {}}
+```
+
+Errors use:
+
+```json
+{"status": "error", "message": "..."}
+```
+
+## MoySklad catalog import
+
+`src/services/moysklad_import.py` provides composable async functions for:
+
+- idempotent product and variant upserts;
+- characteristics, sale price and available-stock synchronization;
+- local category assignment;
+- S3 object-key and primary-image metadata handling;
+- explicit full-import archiving when it is safe to enable.
+
+The service does not commit transactions itself. Callers should wrap a complete
+import in `async with session.begin()` and keep `archive_missing=False` until
+legacy catalog rows are mapped and verified.
+
+## Tests and Docker
+
+```bash
+uv run python -m pytest -q
+docker compose up --build -d
+docker compose down
+```
+
+Action logs are written to `logs/actions.log`; sensitive request fields are
+redacted.

@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.core.database import get_db
 from src.exceptions import JSRError
 from src.models import Payment, Purchase
+from src.schemas.contact import normalize_contact_info
 from src.schemas.payment import PaymentResponse
 from src.services.payment_sync import refresh_payment_state
 
@@ -19,8 +20,7 @@ def _serialize_payment(payment: Payment, purchase: Purchase | None) -> dict:
       {
         "id": purchase.id,
         "created_ts": purchase.created_ts,
-        "payment_method": purchase.payment_method,
-        "contact_info": purchase.contact_info,
+        "contact_info": normalize_contact_info(purchase.contact_info),
       }
       if purchase is not None else None
     ),
