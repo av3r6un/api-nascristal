@@ -57,7 +57,15 @@ class MoySkladImportService:
     rows: Sequence[Mapping[str, Any]],
     archive_missing: bool,
   ) -> tuple[list[Product], list[Mapping[str, Any]]]:
-    rows = [row for row in rows if not self._is_archived(row)]
+    skipped: list[Mapping[str, Any]] = []
+    active_rows: list[Mapping[str, Any]] = []
+    for row in rows:
+      if self._is_archived(row):
+        skipped.append(row)
+      else:
+        active_rows.append(row)
+
+    rows = active_rows
     product_rows = [row for row in rows if self._entity_type(row) == "product"]
     variants_by_product: dict[uuid.UUID, list[Mapping[str, Any]]] = {}
     for row in rows:
@@ -66,7 +74,6 @@ class MoySkladImportService:
         variants_by_product.setdefault(product_uuid, []).append(row)
 
     importable: list[tuple[Mapping[str, Any], list[Mapping[str, Any]]]] = []
-    skipped: list[Mapping[str, Any]] = []
     for product_data in product_rows:
       product_uuid = self._uuid(product_data.get("id"), "product.id")
       variants = variants_by_product.pop(product_uuid, [])
