@@ -1,15 +1,19 @@
 import uuid
 from decimal import Decimal, ROUND_HALF_UP
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Header
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 
 from src.core.config import settings
 from src.core.database import get_db
 from src.exceptions import JSRError
-from src.models import Payment, Product, ProductAttribute, PropertyOption, Purchase, PurchaseStatus
+from src.models import AttributeOption, Payment, ProductAttribute, ProductVariant, Purchase, PurchaseStatus
+
+Product = ProductVariant
+PropertyOption = AttributeOption
 from src.models.payment import PaymentStatus as ProviderPaymentStatus
 from src.schemas.contact import normalize_contact_info, normalize_delivery_info
 from src.schemas.purchase import (
@@ -19,7 +23,8 @@ from src.schemas.purchase import (
   PurchasesResponse,
   PurchaseTrackingResponse,
 )
-from src.services.payment_sync import refresh_payment_state
+from src.services.purchase_sync import build_order_payload, lock_purchase, sync_purchase, sync_purchase_status
+from src.services.payment_sync import apply_successful_payment, refresh_payment_state
 from src.services.yookassa import (
   build_purchase_return_url,
   build_yookassa_payment_payload,
@@ -51,8 +56,12 @@ async def _get_products_or_404(session: AsyncSession, product_ids: list[int]) ->
   unique_product_ids = list(dict.fromkeys(product_ids))
   query = (
     select(Product)
-    .options(selectinload(Product.attributes).selectinload(ProductAttribute.option))
-    .options(selectinload(Product.offers))
+    .options(
+      selectinload(Product.attributes)
+      .selectinload(ProductAttribute.option)
+      .selectinload(AttributeOption.attribute)
+    )
+    .options(selectinload(Product.offer))
     .where(Product.id.in_(unique_product_ids))
   )
   products = (await session.execute(query)).scalars().all()
@@ -69,8 +78,9 @@ def _resolve_property_option_eids(product: Product, properties: list[str]) -> li
   for attribute in product.attributes:
     if attribute.option is None:
       continue
-    options_by_value[attribute.option.value] = attribute.option.eid
-    options_by_eid[attribute.option.eid] = attribute.option.eid
+    option_id = str(attribute.option.id)
+    options_by_value[attribute.option.value] = option_id
+    options_by_eid[option_id] = option_id
 
   resolved = []
   missing = []
@@ -127,10 +137,10 @@ def _delivery_description(delivery) -> str:
 
 
 def _primary_offer(product: Product):
-  active_offers = [offer for offer in product.offers if offer.is_active]
-  if not active_offers:
+  offer = product.offer
+  if offer is None or not offer.is_active:
     raise JSRError("bad_request", message=f"Active offer not found for product {product.id}")
-  return sorted(active_offers, key=lambda offer: offer.id)[0]
+  return offer
 
 
 def _price_int(value: Decimal) -> int:
@@ -317,7 +327,7 @@ async def _load_product_map(session: AsyncSession, product_ids: list[int]) -> di
 
   result = await session.execute(
     select(Product)
-    .options(selectinload(Product.offers))
+    .options(selectinload(Product.offer))
     .where(Product.id.in_(product_ids))
   )
   return {product.id: product for product in result.scalars().all()}
@@ -327,12 +337,16 @@ async def _load_property_option_map(session: AsyncSession, property_eids: list[s
   if not property_eids:
     return {}
 
+  option_ids = [int(option_id) for option_id in property_eids if option_id.isdigit()]
+  if not option_ids:
+    return {}
+
   result = await session.execute(
     select(PropertyOption)
-    .options(selectinload(PropertyOption.property))
-    .where(PropertyOption.eid.in_(property_eids))
+    .options(selectinload(PropertyOption.attribute))
+    .where(PropertyOption.id.in_(option_ids))
   )
-  return {option.eid: option for option in result.scalars().all()}
+  return {str(option.id): option for option in result.scalars().all()}
 
 
 async def _load_payment_map(session: AsyncSession, payment_ids: list[int | None]) -> dict[int, Payment]:
@@ -366,14 +380,14 @@ def _serialize_purchase(
       "properties": [
         {
           "value": option.value,
-          "name": option.name,
+          "name": option.label,
           "property": {
-            "id": option.property.id,
-            "name": option.property.name,
+            "id": option.attribute.id,
+            "name": option.attribute.name,
           },
         }
         for option_eid in purchase.properties.get(str(product_id), [])
-        if (option := options_by_eid.get(option_eid)) is not None and option.property is not None
+        if (option := options_by_eid.get(option_eid)) is not None and option.attribute is not None
       ],
     }
 
@@ -526,7 +540,21 @@ async def _create_card_payment_for_purchase(
 
 
 @router.post("/", response_model=PurchaseResponse, status_code=200)
-async def create_purchase(payload: PurchaseCreateRequest, session: AsyncSession = Depends(get_db)) -> dict:
+async def create_purchase(
+  payload: PurchaseCreateRequest,
+  session: AsyncSession = Depends(get_db),
+  idempotency_key: uuid.UUID | None = Header(default=None, alias="Idempotency-Key"),
+) -> dict:
+  if idempotency_key is not None:
+    existing = await Purchase.first(session, uuid=str(idempotency_key))
+    if existing is not None:
+      purchase = await lock_purchase(session, existing.id)
+      products_by_id = await _load_product_map(session, purchase.product_ids)
+      if settings.MOYSKLAD_CHECKOUT_SYNC_ENABLED:
+        await sync_purchase(session, purchase, products_by_id)
+      await session.commit()
+      await session.refresh(purchase)
+      return await _serialize_purchase_with_refs(session, purchase)
   product_ids = [item.id for item in payload.items]
   products = await _get_products_or_404(session, product_ids)
   products_by_id = {product.id: product for product in products}
@@ -544,8 +572,28 @@ async def create_purchase(payload: PurchaseCreateRequest, session: AsyncSession 
     quantity=sum(item.quantity.value for item in payload.items),
     contact_info=contact_info,
     final_price=payload.price,
+    purchase_uuid=str(idempotency_key) if idempotency_key else None,
   )
+  # Validate before persisting. The Purchase itself is the durable retry payload.
+  if settings.MOYSKLAD_CHECKOUT_SYNC_ENABLED:
+    build_order_payload(purchase, products_by_id)
+  elif _calculate_purchase_total(products_by_id, quantities_by_product, payload.delivery) != _money(payload.price):
+    raise JSRError('bad_request', message='Order total does not match items and delivery')
   session.add(purchase)
+  try:
+    await session.commit()
+  except IntegrityError:
+    await session.rollback()
+    if idempotency_key is None:
+      raise
+    existing = await Purchase.first(session, uuid=str(idempotency_key))
+    if existing is None:
+      raise
+    purchase = existing
+  purchase = await lock_purchase(session, purchase.id)
+  products_by_id = await _load_product_map(session, purchase.product_ids)
+  if settings.MOYSKLAD_CHECKOUT_SYNC_ENABLED:
+    await sync_purchase(session, purchase, products_by_id)
   await session.commit()
   await session.refresh(purchase)
   return await _serialize_purchase_with_refs(session, purchase)
@@ -579,12 +627,8 @@ async def get_purchases(session: AsyncSession = Depends(get_db)) -> dict[str, li
 async def get_purchase_by_uuid(purchase_uuid: str, session: AsyncSession = Depends(get_db)) -> dict:
   purchase = await _get_purchase_by_uuid_or_404(session, purchase_uuid)
   payment = await Payment.first(session, id=purchase.payment_id) if purchase.payment_id is not None else None
-  if payment is not None and purchase.status == PurchaseStatus.AWAITING_PAYMENT:
+  if payment is not None:
     payment = await refresh_payment_state(session, payment, purchase)
-    if payment.status == ProviderPaymentStatus.SUCCEEDED.value or payment.paid:
-      purchase.status = PurchaseStatus.DELIVERING
-      await session.commit()
-      await session.refresh(purchase)
   return _serialize_purchase_tracking(payment, purchase)
 
 
@@ -613,6 +657,7 @@ async def create_purchase_payment_by_uuid(purchase_uuid: str, session: AsyncSess
   await session.commit()
   await session.refresh(purchase)
   await session.refresh(payment)
+  await apply_successful_payment(session, payment, purchase)
   return _serialize_purchase_tracking(payment, purchase)
 
 
@@ -628,7 +673,7 @@ async def update_purchase(
   payload: PurchaseDeliveryPatchRequest,
   session: AsyncSession = Depends(get_db),
 ) -> dict:
-  purchase = await _get_purchase_or_404(session, purchase_id)
+  purchase = await lock_purchase(session, purchase_id)
   if payload.products is not None:
     product_ids = [item.id for item in payload.products]
     quantities_by_product: dict[int, int] = {}
@@ -704,6 +749,8 @@ async def update_purchase(
   purchase.status = PurchaseStatus.AWAITING_PAYMENT
   # mailing here
 
+  if settings.MOYSKLAD_CHECKOUT_SYNC_ENABLED:
+    await sync_purchase(session, purchase, products_by_id, patch=True)
   await session.commit()
   await session.refresh(purchase)
   return await _serialize_purchase_with_refs(session, purchase)
@@ -711,9 +758,10 @@ async def update_purchase(
 
 @router.put("/{purchase_id}", response_model=PurchaseResponse, status_code=200)
 async def mark_purchase_delivering(purchase_id: int, session: AsyncSession = Depends(get_db)) -> dict:
-  purchase = await _get_purchase_or_404(session, purchase_id)
+  purchase = await lock_purchase(session, purchase_id)
   purchase.status = PurchaseStatus.DELIVERING
   # mailing here
+  await sync_purchase_status(session, purchase)
   await session.commit()
   await session.refresh(purchase)
   return await _serialize_purchase_with_refs(session, purchase)
@@ -721,16 +769,20 @@ async def mark_purchase_delivering(purchase_id: int, session: AsyncSession = Dep
 
 @router.post("/{purchase_id}", response_model=PurchaseResponse, status_code=200)
 async def finish_purchase(purchase_id: int, session: AsyncSession = Depends(get_db)) -> dict:
-  purchase = await _get_purchase_or_404(session, purchase_id)
+  purchase = await lock_purchase(session, purchase_id)
   purchase.status = PurchaseStatus.FINISHED
   # mailing here
+  await sync_purchase_status(session, purchase)
   await session.commit()
   await session.refresh(purchase)
   return await _serialize_purchase_with_refs(session, purchase)
 
 
-@router.delete("/{purchase_id}", status_code=200)
-async def delete_purchase(purchase_id: int, session: AsyncSession = Depends(get_db)) -> dict[str, bool]:
-  purchase = await _get_purchase_or_404(session, purchase_id)
-  await purchase.delete(session)
-  return {"processed": True}
+@router.post("/{purchase_id}/sync", response_model=PurchaseResponse, status_code=200)
+async def retry_purchase_sync(purchase_id: int, session: AsyncSession = Depends(get_db)) -> dict:
+  purchase = await lock_purchase(session, purchase_id)
+  products_by_id = await _load_product_map(session, purchase.product_ids)
+  await sync_purchase(session, purchase, products_by_id)
+  await session.commit()
+  await session.refresh(purchase)
+  return await _serialize_purchase_with_refs(session, purchase)

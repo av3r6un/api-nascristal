@@ -1,12 +1,12 @@
 from .auth import AuthResponse, LoginRequest, RefreshRequest, RefreshResponse, RegisterRequest
-from .catalog import CatalogResponse
+from .attribute import AttributeOptionPatchItem, AttributeOptionsPatchRequest
 from .category import CategoriesPatchRequest, CategoriesResponse
 from .change_event import ChangeEventsResponse, LastUpdateResponse
 from .feedback import FeedbackResponse, FeedbackRequest
 from .i18n import I18nPatchResponse
 from .moysklad import MoySkladImportResponse
 from .payment import PaymentInfo, PaymentResponse, PaymentTrackingInfo, PaymentWithPurchaseInfo
-from .product import ProductsResponse, ProductsAttributesResponse
+from .product import ProductsResponse, ProductsAttributesResponse, ProductResponse
 from .purchase import (
   PurchaseCreateRequest,
   PurchaseDeliveryPatchRequest,
@@ -14,7 +14,5 @@ from .purchase import (
   PurchaseResponse,
   PurchasesResponse,
 )
-from .property_option import PropertyOptionsPatchRequest, PropertyOptionsResponse
-from .stock import StockResponse
 from .static import StaticPageResponse, StaticPageRequest, StaticPagesResponse
 from .settings import SettingsRequest

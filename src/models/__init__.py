@@ -1,7 +1,7 @@
 from .user import User
 from .feedback import Feedback
 from .payment import Payment, PaymentProvider, PaymentStatus
-from .purchase import Purchase, PurchaseStatus
+from .purchase import Purchase, PurchaseStatus, PurchaseSubmission
 from .locale_overrides import LocaleOverride
 from .static import StaticPage, StaticPagesTranslation
 from .settings import Setting
@@ -13,6 +13,5 @@ from .products import (
   Offer,
   Product,
   ProductAttribute,
-  ProductImage,
   ProductVariant,
 )

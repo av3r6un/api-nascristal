@@ -79,6 +79,7 @@ def _create_product_variants() -> None:
     sa.Column("external_code", sa.String(length=24), nullable=False),
     sa.Column("archived", sa.Boolean(), server_default=sa.false(), nullable=False),
     sa.Column("sku", sa.String(length=48), nullable=False),
+    sa.Column("image_key", sa.String(length=255), nullable=True),
     sa.Column("created", sa.DateTime(), server_default=sa.func.now(), nullable=False),
     sa.Column("updated", sa.DateTime(), server_default=sa.func.now(), nullable=False),
     sa.ForeignKeyConstraint(["product_id"], ["products.id"]),
@@ -103,23 +104,41 @@ def _create_attributes() -> None:
   )
 
 
+def _create_attribute_options() -> None:
+  op.create_table(
+    "attribute_options",
+    sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
+    sa.Column("attribute_id", sa.Integer(), nullable=False),
+    sa.Column("value", sa.String(length=255), nullable=False),
+    sa.Column("label", sa.String(length=255), nullable=True),
+    sa.Column("created", sa.DateTime(), server_default=sa.func.now(), nullable=False),
+    sa.Column("updated", sa.DateTime(), server_default=sa.func.now(), nullable=False),
+    sa.ForeignKeyConstraint(["attribute_id"], ["attributes.id"]),
+    sa.PrimaryKeyConstraint("id"),
+    sa.UniqueConstraint(
+      "attribute_id",
+      "value",
+      name="uq_attribute_options_attribute_value",
+    ),
+    **MYSQL_TABLE_ARGS,
+  )
+
+
 def _create_product_attributes() -> None:
   op.create_table(
     "product_attributes",
     sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
     sa.Column("variant_id", sa.Integer(), nullable=False),
-    sa.Column("attribute_id", sa.Integer(), nullable=False),
-    sa.Column("value", sa.String(length=100), nullable=False),
-    sa.Column("label", sa.String(length=100), nullable=True),
+    sa.Column("option_id", sa.Integer(), nullable=False),
     sa.Column("created", sa.DateTime(), server_default=sa.func.now(), nullable=False),
     sa.Column("updated", sa.DateTime(), server_default=sa.func.now(), nullable=False),
-    sa.ForeignKeyConstraint(["attribute_id"], ["attributes.id"]),
+    sa.ForeignKeyConstraint(["option_id"], ["attribute_options.id"]),
     sa.ForeignKeyConstraint(["variant_id"], ["product_variants.id"]),
     sa.PrimaryKeyConstraint("id"),
     sa.UniqueConstraint(
       "variant_id",
-      "attribute_id",
-      name="uq_product_attributes_variant_attribute",
+      "option_id",
+      name="uq_product_attributes_variant_option",
     ),
     **MYSQL_TABLE_ARGS,
   )
@@ -161,7 +180,7 @@ def _create_offers() -> None:
     sa.Column("variant_id", sa.Integer(), nullable=False),
     sa.Column("amount", sa.DECIMAL(precision=12, scale=2), server_default="0.00", nullable=False),
     sa.Column("is_active", sa.Boolean(), server_default=sa.true(), nullable=False),
-    sa.Column("quantity", sa.Integer(), server_default="0", nullable=False),
+    sa.Column("quantity", sa.Double(), server_default="0", nullable=False),
     sa.Column("created", sa.DateTime(), server_default=sa.func.now(), nullable=False),
     sa.Column("updated", sa.DateTime(), server_default=sa.func.now(), nullable=False),
     sa.ForeignKeyConstraint(["variant_id"], ["product_variants.id"]),
@@ -409,11 +428,30 @@ def _create_legacy_offers() -> None:
   op.create_index("ix_offers_product_id", "offers", ["product_id"], unique=False)
 
 
+def _create_purchase_submissions() -> None:
+  op.create_table(
+    "purchase_submissions",
+    sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
+    sa.Column("uuid", sa.Uuid(), nullable=False),
+    sa.Column("order_id", sa.String(length=255), nullable=False),
+    sa.Column("purchase_id", sa.Integer(), nullable=False),
+    sa.Column("created", sa.DateTime(), server_default=sa.func.now(), nullable=False),
+    sa.Column("updated", sa.DateTime(), server_default=sa.func.now(), nullable=False),
+    sa.ForeignKeyConstraint(["purchase_id"], ["purchases.id"]),
+    sa.PrimaryKeyConstraint("id"),
+    sa.UniqueConstraint("uuid", name="uq_purchase_submissions_uuid"),
+    sa.UniqueConstraint("order_id", name="uq_purchase_submissions_order_id"),
+    sa.UniqueConstraint("purchase_id", name="uq_purchase_submissions_purchase_id"),
+    **MYSQL_TABLE_ARGS,
+  )
+
+
 def upgrade() -> None:
   # Replacing the catalog is intentional. No legacy catalog rows are copied.
   for table_name in (
     "offers",
     "product_attributes",
+    "attribute_options",
     "product_images",
     "product_variants",
     "products",
@@ -429,20 +467,24 @@ def upgrade() -> None:
   _create_products()
   _create_product_variants()
   _create_attributes()
+  _create_attribute_options()
   _create_product_attributes()
   _create_product_images()
   _create_offers()
+  _create_purchase_submissions()
 
 
 def downgrade() -> None:
   for table_name in (
     "offers",
     "product_attributes",
+    "attribute_options",
     "product_images",
     "attributes",
     "product_variants",
     "products",
     "categories",
+    "purchase_submissions",
   ):
     _drop_if_exists(table_name)
 

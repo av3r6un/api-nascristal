@@ -1,10 +1,13 @@
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.config import settings
-from src.models import Product, Attribute, Category
+from src.core.change_logging import record_change
+from src.models import Product, Attribute, AttributeOption, Category
 from src.models.settings import SettingsKeys
+from src.exceptions import JSRError
 
 from .server_settings import ServerSettings
 
@@ -40,8 +43,27 @@ class ProductService:
     return await cls(session)._get_products(page, fetch_all=fetch_all, **filters)
   
   @classmethod
+  async def get_product(cls, session: AsyncSession, id) -> dict[str, Any]:
+    return await cls(session)._get_product(id)
+  
+  @classmethod
   async def get_attributes(cls, session: AsyncSession, **kwargs) -> dict[str, Any]:
     return await cls(session)._get_attrs(**kwargs)
+
+  @classmethod
+  async def patch_attribute_options(cls, session: AsyncSession, items, actor_uid: str | None = None) -> dict[str, Any]:
+    service = cls(session)
+    ids = [item.id for item in items]
+    options = (await session.execute(select(AttributeOption).where(AttributeOption.id.in_(ids)))).scalars().all()
+    options_by_id = {option.id: option for option in options}
+    missing_ids = sorted(set(ids) - options_by_id.keys())
+    if missing_ids:
+      raise JSRError("not_found", message=f"Attribute options not found: {', '.join(map(str, missing_ids))}")
+    for item in items:
+      options_by_id[item.id].label = item.label
+    await session.commit()
+    await record_change(session, "attribute_options.updated", payload={"ids": ids}, actor_uid=actor_uid)
+    return await service._get_attrs()
 
   async def _get_products(self, page: int, fetch_all: bool = False, **filters) -> dict[str, Any]:
     page_size = self._pagination(page)
@@ -53,12 +75,24 @@ class ProductService:
     }
     products = await Product.all(
       self.session,
-      relationships=["category", "images", "variants.attributes.option.attribute", "variants.offer"],
+      relationships=["category", "variants.attributes.option.attribute", "variants.offer"],
       order_by=["archived", "name", "id"],
       **pagination,
       **filters,
     )
     return self._response(products, page, limit, public=False, page_size=page_size)
+  
+  async def _get_product(self, id: int) -> dict:
+    product = await Product.first(
+      self.session,
+      id=id,
+      relationships=["category", "variants.attributes.option.attribute", "variants.offer"],
+    )
+    if not product: raise JSRError('not_found', message=f'Product[{id}] is not found!')
+    item = self._serialize(product, public=True)
+    if item is None:
+      raise JSRError('not_found', message=f'Product[{id}] is not available!')
+    return item
 
   async def _get_stock(self, page: int, fetch_all: bool = False, **filters) -> dict[str, Any]:
     page_size = self._pagination(page)
@@ -71,7 +105,7 @@ class ProductService:
     }
     products = await Product.all(
       self.session,
-      relationships=["category", "images", "variants.attributes.option.attribute", "variants.offer"],
+      relationships=["category", "variants.attributes.option.attribute", "variants.offer"],
       order_by=["name", "id"],
       **pagination,
       **filters,
@@ -115,12 +149,25 @@ class ProductService:
         return None
 
     item = product.json
-    item["variants"] = [variant.json for variant in variants]
-    item["variants_count"] = sum(v.offer.quantity for v in variants)
-    item["images"] = [
-      image.json | {"url": f"{settings.S3_DOMAIN.rstrip('/')}/{image.object_key.lstrip('/')}"}
-      for image in sorted(product.images, key=lambda image: (image.sort_order, image.id))
+    item["variants"] = [
+      variant.json | {
+        "image_url": (
+          f"{settings.S3_DOMAIN.rstrip('/')}/{variant.image_key.lstrip('/')}"
+          if variant.image_key else None
+        ),
+      }
+      for variant in variants
     ]
+    item["variants_count"] = sum(v.offer.quantity for v in variants)
+    first_variant_key = next(
+      (variant.image_key for variant in variants if variant.image_key),
+      None,
+    )
+    item["images"] = ([{
+      "object_key": first_variant_key,
+      "url": f"{settings.S3_DOMAIN.rstrip('/')}/{first_variant_key.lstrip('/')}",
+      "primary": True,
+    }] if first_variant_key else [])
     if public:
       item["min_price"] = min(variant.offer.amount for variant in variants)
     return item

@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends
+from src.core.change_logging import record_change
 from src.core.database import get_db
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.schemas import MoySkladImportResponse
@@ -19,11 +20,20 @@ async def manual_import(
     ]
 
   products, skipped_products = await MoySkladImportService.import_assortment(session, rows)
-  await session.commit()
+  variants_count = sum(1 for row in rows if row.get("meta", {}).get("type") == "variant")
+  await record_change(
+    session,
+    "products.moysklad.imported",
+    payload={
+      "products": len(products),
+      "variants": variants_count,
+      "skipped_products": len(skipped_products),
+    },
+  )
 
   return MoySkladImportResponse(
     products=len(products),
-    variants=sum(1 for row in rows if row.get("meta", {}).get("type") == "variant"),
+    variants=variants_count,
     skipped_products=[
       {"id": product["id"], "name": product["name"]}
       for product in skipped_products

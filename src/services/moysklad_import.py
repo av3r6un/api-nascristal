@@ -5,8 +5,9 @@ from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any
 import uuid
+import math
 
-from sqlalchemy import select, update
+from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models import (
@@ -16,7 +17,6 @@ from src.models import (
   Offer,
   Product,
   ProductAttribute,
-  ProductImage,
   ProductVariant,
 )
 
@@ -88,7 +88,6 @@ class MoySkladImportService:
     options = await self._load_attribute_options(variants, attributes)
     await self._sync_attributes(variants, attributes, options)
     await self._sync_offers(variants)
-    await self._sync_images(products)
     if archive_missing:
       await self._archive_missing(
         {product.uuid for product, _ in products},
@@ -141,19 +140,17 @@ class MoySkladImportService:
     importable: Sequence[tuple[Mapping[str, Any], list[Mapping[str, Any]]]],
     categories: Mapping[str, Category],
   ) -> list[tuple[Product, list[Mapping[str, Any]]]]:
-    product_uuids = {self._uuid(data.get("id"), "product.id") for data, _ in importable}
-    existing = (
-      await self.session.execute(select(Product).where(Product.uuid.in_(product_uuids)))
-    ).scalars().all()
-    products_by_uuid = {product.uuid: product for product in existing}
-    products = []
+    existing = await self._identity_candidates(Product, [data for data, _ in importable])
+    products = {}
 
     for data, variants in importable:
       product_uuid = self._uuid(data.get("id"), "product.id")
-      product = products_by_uuid.get(product_uuid)
+      product = self._identity_match(existing, data, "product")
       if product is None:
         product = Product(uuid=product_uuid)
         self.session.add(product)
+        existing.append(product)
+      product.uuid = product_uuid
       product.category_id = categories[self._category_name(data)].id
       product.sku = self._optional_text(data.get("article"))
       product.name = self._text(data, "name")
@@ -162,42 +159,67 @@ class MoySkladImportService:
       product.external_code = self._text(data, "externalCode")
       product.server_updated = self._datetime(data.get("updated"))
       product.archived = bool(data.get("archived", False))
-      products.append((product, variants))
+      products[id(product)] = (product, variants)
 
     await self.session.flush()
-    return products
+    return list(products.values())
+
+  async def _identity_candidates(self, model, rows):
+    """Load matches by any upstream identifier, including archived records."""
+    identifiers = {self._uuid(row.get("id"), "id") for row in rows}
+    codes = {self._text(row, "code") for row in rows}
+    external_codes = {self._text(row, "externalCode") for row in rows}
+    return list((await self.session.execute(
+      select(model).where(or_(
+        model.uuid.in_(identifiers),
+        model.code.in_(codes),
+        model.external_code.in_(external_codes),
+      )),
+    )).scalars().all())
+
+  def _identity_match(self, candidates, data, entity):
+    identifier = self._uuid(data.get("id"), f"{entity}.id")
+    code = self._text(data, "code")
+    external_code = self._text(data, "externalCode")
+    matches = [item for item in candidates if (
+      item.uuid == identifier or item.code == code or item.external_code == external_code
+    )]
+    if len(matches) > 1:
+      raise MoySkladImportError(
+        f"Conflicting {entity} identifiers: uuid={identifier}, code={code}, "
+        f"externalCode={external_code} match multiple local records "
+        f"{[item.id for item in matches]}",
+      )
+    return matches[0] if matches else None
 
   async def _load_variants(
     self,
     products: Sequence[tuple[Product, list[Mapping[str, Any]]]],
   ) -> list[tuple[ProductVariant, Mapping[str, Any]]]:
     rows = [row for _, variants in products for row in variants]
-    variant_uuids = {self._uuid(row.get("id"), "variant.id") for row in rows}
-    existing = (
-      await self.session.execute(
-        select(ProductVariant).where(ProductVariant.uuid.in_(variant_uuids)),
-      )
-    ).scalars().all()
-    variants_by_uuid = {variant.uuid: variant for variant in existing}
-    result = []
+    existing = await self._identity_candidates(ProductVariant, rows)
+    result = {}
 
     for product, variants in products:
       for data in variants:
         variant_uuid = self._uuid(data.get("id"), "variant.id")
-        variant = variants_by_uuid.get(variant_uuid)
+        variant = self._identity_match(existing, data, "variant")
         if variant is None:
           variant = ProductVariant(uuid=variant_uuid)
           self.session.add(variant)
+          existing.append(variant)
+        variant.uuid = variant_uuid
         variant.product_id = product.id
         variant.name = self._text(data, "name")
         variant.code = self._text(data, "code")
         variant.external_code = self._text(data, "externalCode")
         variant.sku = self._optional_text(data.get("article")) or variant.code
+        variant.image_key = self._image_key(data)
         variant.archived = bool(data.get("archived", False))
-        result.append((variant, data))
+        result[id(variant)] = (variant, data)
 
     await self.session.flush()
-    return result
+    return list(result.values())
 
   async def _load_attributes(
     self,
@@ -310,36 +332,16 @@ class MoySkladImportService:
       offer.quantity = self._quantity(data.get("quantity", 0))
       offer.is_active = not variant.archived
 
-  async def _sync_images(
-    self,
-    products: Sequence[tuple[Product, list[Mapping[str, Any]]]],
-  ) -> None:
-    product_ids = [product.id for product, _ in products]
-    existing = (
-      await self.session.execute(
-        select(ProductImage).where(ProductImage.product_id.in_(product_ids)),
-      )
-    ).scalars().all()
-    images = {(image.product_id, image.object_key): image for image in existing}
-    for image in existing:
-      image.is_primary = False
-
-    for product, variants in products:
-      for sort_order, object_key in enumerate(self._image_keys(variants)):
-        image = images.get((product.id, object_key))
-        if image is None:
-          image = ProductImage(uuid=uuid.uuid4(), product_id=product.id, object_key=object_key)
-          self.session.add(image)
-        image.sort_order = sort_order
-        image.is_primary = sort_order == 0
-
   def _characteristics(self, data: Mapping[str, Any]) -> list[Mapping[str, Any]]:
     items = data.get("characteristics", [])
     if not isinstance(items, Sequence) or isinstance(items, (str, bytes)):
       raise MoySkladImportError("Variant characteristics must be an array")
     if not all(isinstance(item, Mapping) for item in items):
       raise MoySkladImportError("Variant characteristic must be an object")
-    return [item for item in items if item.get("name") != "ID изображения"]
+    return [
+      item for item in items
+      if str(item.get("name", "")).strip().casefold() != "id изображения".casefold()
+    ]
 
   def _image_keys(self, variants: Sequence[Mapping[str, Any]]) -> list[str]:
     keys = []
@@ -348,11 +350,17 @@ class MoySkladImportService:
       if not isinstance(items, Sequence) or isinstance(items, (str, bytes)):
         continue
       for item in items:
-        if isinstance(item, Mapping) and item.get("name") == "ID изображения":
+        if isinstance(item, Mapping) and str(item.get("name", "")).strip().casefold() == "id изображения".casefold():
           key = self._optional_text(item.get("value"))
           if key and key not in keys:
             keys.append(key)
     return keys
+
+  def _image_key(self, data: Mapping[str, Any]) -> str | None:
+    for item in data.get("characteristics", []):
+      if isinstance(item, Mapping) and str(item.get("name", "")).strip().casefold() == "id изображения".casefold():
+        return self._optional_text(item.get("value"))
+    return None
 
   def _sale_price(self, data: Mapping[str, Any]) -> Decimal:
     prices = data.get("salePrices")
@@ -366,14 +374,17 @@ class MoySkladImportService:
     except (InvalidOperation, TypeError, ValueError) as exc:
       raise MoySkladImportError("Invalid salePrice value") from exc
 
-  def _quantity(self, value: Any) -> int:
+  def _quantity(self, value: Any) -> float:
     try:
       quantity = Decimal(str(value))
     except (InvalidOperation, TypeError, ValueError) as exc:
       raise MoySkladImportError("Invalid quantity") from exc
-    if quantity != quantity.to_integral_value():
-      raise MoySkladImportError("Quantity must be an integer")
-    return max(0, int(quantity))
+    if not quantity.is_finite():
+      raise MoySkladImportError("Invalid quantity")
+    result = float(quantity)
+    if not math.isfinite(result):
+      raise MoySkladImportError("Invalid quantity")
+    return result
 
   def _category_name(self, data: Mapping[str, Any]) -> str:
     name = self._text(data, "pathName").rsplit("/", 1)[-1].strip()

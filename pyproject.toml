@@ -20,6 +20,7 @@ dependencies = [
     "uvicorn[standard]>=0.41.0",
     "pillow>=12.3.0",
     "minio>=7.2.20",
+    "python-multipart>=0.0.20",
 ]
 
 [dependency-groups]

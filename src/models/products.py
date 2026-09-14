@@ -5,7 +5,7 @@ from decimal import Decimal
 from typing import List
 import uuid
 
-from sqlalchemy import Boolean, Integer, String, Uuid, Text, ForeignKey, DateTime, DECIMAL, UniqueConstraint, false, true
+from sqlalchemy import Boolean, Double, Integer, String, Uuid, Text, ForeignKey, DateTime, DECIMAL, UniqueConstraint, false, true
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
@@ -25,13 +25,12 @@ class Product(Base):
   
   category: Mapped[Category] = relationship("Category", back_populates="products", lazy="selectin")
   variants: Mapped[List[ProductVariant]] = relationship("ProductVariant", back_populates="product", lazy="selectin") # type: ignore
-  images: Mapped[List[ProductImage]] = relationship('ProductImage', back_populates='product', lazy='selectin')
   
   @property
   def json(self):
     return dict(
       id=self.id, uuid=self.uuid, sku=self.sku, name=self.name, description=self.description, archived=self.archived,
-      category=self.category.json, variants=[a.json for a in self.variants], images=[a.json for a in self.images]
+      category=self.category.json, variants=[a.json for a in self.variants], images=[]
     )
   
 
@@ -44,6 +43,7 @@ class ProductVariant(Base):
   external_code: Mapped[str] = mapped_column(String(24), nullable=False)
   archived: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())
   sku: Mapped[str] = mapped_column(String(48), nullable=False)
+  image_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
   
   product: Mapped[Product] = relationship("Product", back_populates='variants', lazy='selectin')
   attributes: Mapped[List[ProductAttribute]] = relationship('ProductAttribute', back_populates='variant', lazy='selectin')
@@ -67,7 +67,7 @@ class Offer(Base):
   variant_id: Mapped[int] = mapped_column(Integer, ForeignKey('product_variants.id'), nullable=False, index=True)
   amount: Mapped[Decimal] = mapped_column(DECIMAL(12, 2), nullable=False, default=Decimal("0.00"), server_default="0.00")
   is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=true())
-  quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+  quantity: Mapped[float] = mapped_column(Double, nullable=False, default=0, server_default="0")
   
   variant: Mapped[ProductVariant] = relationship("ProductVariant", back_populates="offer")
   
@@ -156,20 +156,3 @@ class Category(Base):
     return dict(id=self.id, name=self.name, sort_order=self.sort_order)
   
 
-class ProductImage(Base):
-  __table_args__ = (
-    UniqueConstraint('product_id','object_key', name='uq_product_images_product_object_key'),
-  )
-  
-  id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-  uuid: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False, unique=True)
-  product_id: Mapped[int] = mapped_column(Integer, ForeignKey('products.id'), nullable=False, index=True)
-  object_key: Mapped[str] = mapped_column(String(255), nullable=False)
-  sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
-  is_primary: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())
-
-  product: Mapped[Product] = relationship('Product', back_populates='images')
-
-  @property
-  def json(self):
-    return dict(id=self.id, uuid=self.uuid, object_key=self.object_key, sort_order=self.sort_order, primary=self.is_primary)

@@ -13,7 +13,7 @@ router = APIRouter(prefix="/api/categories", tags=["categories"])
 
 
 async def _fetch_categories(session: AsyncSession) -> list[Category]:
-  query = select(Category).order_by(Category.index.asc(), Category.id.asc())
+  query = select(Category).order_by(Category.sort_order.asc(), Category.id.asc())
   result = await session.execute(query)
   return result.scalars().all()
 
@@ -42,10 +42,8 @@ async def patch_categories(
     category = categories_by_id[item.id]
     if item.name is not None:
       category.name = item.name
-    if item.index is not None:
-      category.index = item.index
-    if item.icon is not None:
-      category.icon = item.icon
+    if item.sort_order is not None:
+      category.sort_order = item.sort_order
 
   await session.commit()
 
