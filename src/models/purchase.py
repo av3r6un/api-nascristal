@@ -1,8 +1,9 @@
 import enum
 import uuid
 
-from sqlalchemy import Enum, ForeignKey, Integer, JSON, String
+from sqlalchemy import Enum, ForeignKey, Integer, JSON, String, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from uuid import UUID
 
 from .base import Base
 
@@ -31,7 +32,7 @@ class Purchase(Base):
     default=PurchaseStatus.CREATED,
     server_default=PurchaseStatus.CREATED.name,
   )
-  payment: Mapped["Payment | None"] = relationship("Payment", lazy="selectin")
+  payment: Mapped["Payment | None"] = relationship("Payment", lazy="selectin") # type: ignore
 
   def __init__(
     self,
@@ -70,3 +71,14 @@ class Purchase(Base):
       quantity=self.quantity, contact_info=self.contact_info, final_price=self.final_price,
       status=self.status.value, created_ts=self.created_ts, updated_ts=self.updated_ts
     )
+
+
+class PurchaseSubmission(Base):
+  id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+  uuid: Mapped[UUID] = mapped_column(Uuid, nullable=False, unique=True)
+  order_id: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+  purchase_id: Mapped[int] = mapped_column(Integer, ForeignKey('purchases.id'), nullable=False, unique=True)
+
+  @property
+  def json(self):
+    return dict(id=self.id, uuid=self.uuid, order_id=self.order_id)

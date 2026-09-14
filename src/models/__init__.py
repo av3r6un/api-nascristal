@@ -1,18 +1,17 @@
 from .user import User
 from .feedback import Feedback
 from .payment import Payment, PaymentProvider, PaymentStatus
-from .purchase import Purchase, PurchaseStatus
+from .purchase import Purchase, PurchaseStatus, PurchaseSubmission
 from .locale_overrides import LocaleOverride
 from .static import StaticPage, StaticPagesTranslation
 from .settings import Setting
 from .change_event import ChangeEvent
-from .onec_catalog import (
+from .products import (
+  Attribute,
+  AttributeOption,
   Category,
   Offer,
-  OneCImportRuns,
   Product,
   ProductAttribute,
-  ProductImage,
-  Property,
-  PropertyOption,
+  ProductVariant,
 )

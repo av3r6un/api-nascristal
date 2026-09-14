@@ -3,12 +3,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 class CategoryItem(BaseModel):
   id: int
-  eid: str
-  uid: str
-  parent_id: int | None
   name: str
-  index: int
-  icon: str
+  sort_order: int
 
 
 class CategoriesResponse(BaseModel):
@@ -19,9 +15,8 @@ class CategoryPatchItem(BaseModel):
   model_config = ConfigDict(extra="forbid")
 
   id: int
-  name: str | None = Field(default=None, max_length=255)
-  index: int | None = Field(default=None, ge=0)
-  icon: str | None = Field(default=None, max_length=25)
+  name: str | None = Field(default=None, max_length=50)
+  sort_order: int | None = Field(default=None, ge=0)
 
   @field_validator("name")
   @classmethod
@@ -33,19 +28,9 @@ class CategoryPatchItem(BaseModel):
       raise ValueError("Category name must not be empty")
     return value
 
-  @field_validator("icon")
-  @classmethod
-  def validate_icon(cls, value: str | None) -> str | None:
-    if value is None:
-      return value
-    value = value.strip()
-    if not value:
-      raise ValueError("Category icon must not be empty")
-    return value
-
   @model_validator(mode="after")
   def validate_editable_fields(self) -> "CategoryPatchItem":
-    if self.name is None and self.index is None and self.icon is None:
+    if self.name is None and self.sort_order is None:
       raise ValueError("At least one editable field must be provided")
     return self
 

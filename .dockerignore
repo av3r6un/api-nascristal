@@ -1,4 +1,6 @@
 .git
+.env
+src/.env
 .venv
 .pytest_cache/
 __pycache__

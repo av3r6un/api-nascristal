@@ -5,9 +5,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_db
 from src.exceptions import JSRError
-from src.models import Payment, Purchase, PurchaseStatus
+from src.models import Payment
 from src.models.payment import PaymentStatus as ProviderPaymentStatus
 from src.services.yookassa import get_yookassa_payment
+from src.services.payment_sync import apply_successful_payment
 
 
 router = APIRouter(tags=["yookassa"])
@@ -71,10 +72,7 @@ async def yookassa_webhook(request: Request, session: AsyncSession = Depends(get
   payment.response_payload = provider_payment
   payment.notification_payload = payload
 
-  if payment.status == ProviderPaymentStatus.SUCCEEDED.value:
-    purchase = await Purchase.first(session, payment_id=payment.id)
-    if purchase and purchase.status != PurchaseStatus.FINISHED:
-      purchase.status = PurchaseStatus.DELIVERING
-
   await session.commit()
+  await apply_successful_payment(session, payment)
+
   return Response(status_code=200)

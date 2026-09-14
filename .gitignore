@@ -19,3 +19,6 @@ tests/
 .uv_cache
 /*.json
 *.log
+checks/
+docs/
+scripts/

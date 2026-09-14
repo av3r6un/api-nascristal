@@ -14,6 +14,11 @@ class Settings(BaseSettings):
   DB_PORT: int
   DB_NAME: str
 
+  S3_DOMAIN: str
+  S3_ENDPOINT: str = "s3.twcstorage.ru"
+  S3_BUCKET: str
+  S3_ACCESS_KEY: str
+  S3_SECRET_KEY: str
   SECRET_KEY: str = "change-me"
   JWT_TOKEN_EXPIRES: int = 86400
   JWT_REFRESH_TOKEN_EXPIRES: int = 604800
@@ -26,6 +31,16 @@ class Settings(BaseSettings):
   YOOKASSA_RECEIPT_PAYMENT_SUBJECT: str = "commodity"
   YOOKASSA_RECEIPT_DELIVERY_PAYMENT_SUBJECT: str = "service"
   YOOKASSA_RECEIPT_DELIVERY_DESCRIPTION: str = "Delivery"
+  MOYSKLAD_TOKEN: str | None = None
+  MOYSKLAD_WEBHOOK_SECRET: str | None = None
+  MOYSKLAD_CHECKOUT_SYNC_ENABLED: bool = False
+  MOYSKLAD_ORGANIZATION_ID: str | None = None
+  MOYSKLAD_COUNTERPARTY_ID: str | None = None
+  MOYSKLAD_STORE_ID: str | None = None
+  MOYSKLAD_SALES_CHANNEL_ID: str | None = None
+  MOYSKLAD_DELIVERY_SERVICE_ID: str | None = None
+  MOYSKLAD_ORDER_STATES: dict[str, str] = {}
+  DEV_PURCHASE_DELETE_ENABLED: bool = False
 
   model_config = SettingsConfigDict(
     # src/core/config.py -> src/.env
