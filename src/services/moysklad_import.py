@@ -8,6 +8,7 @@ import uuid
 import math
 
 from sqlalchemy import or_, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models import (
@@ -281,10 +282,21 @@ class MoySkladImportService:
         key = (attribute.id, value)
         if key not in options:
           option = AttributeOption(attribute_id=attribute.id, value=value)
+          try:
+            async with self.session.begin_nested():
+              self.session.add(option)
+              await self.session.flush()
+          except IntegrityError:
+            option = await self.session.scalar(
+              select(AttributeOption).where(
+                AttributeOption.attribute_id == attribute.id,
+                AttributeOption.value == value,
+              ),
+            )
+            if option is None:
+              raise
           options[key] = option
-          self.session.add(option)
 
-    await self.session.flush()
     return options
 
   async def _sync_attributes(
