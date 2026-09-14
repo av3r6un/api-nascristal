@@ -1,9 +1,11 @@
+from typing import Literal
+
 from fastapi import APIRouter, Depends, File, Query, Request, UploadFile
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_db
-from src.schemas import ProductsResponse, ProductsAttributesResponse, ProductResponse
+from src.schemas import AdminProductsResponse, ProductStatsResponse, ProductsAttributesResponse, ProductResponse
 from src.services import ProductService
 from src.services.moysklad_client import MoySkladClient
 from src.services.product_image_upload import ProductImageUploadError, ProductImageUploadService
@@ -14,9 +16,30 @@ from src.exceptions import JSRError
 router = APIRouter(prefix="/api/products", tags=["products"])
 
 
-@router.get("/", response_model=ProductsResponse)
-async def get_products(page_index: int = Query(default=0, ge=0), all_products: bool = Query(default=False, alias="all"), session: AsyncSession = Depends(get_db)) -> ProductsResponse:
-  return await ProductService.get_products(session, page_index, fetch_all=all_products)
+@router.get("/", response_model=AdminProductsResponse)
+async def get_products(
+  page_index: int = Query(default=0, ge=0),
+  page_size: int | None = Query(default=None, ge=1, le=100),
+  search: str | None = Query(default=None, max_length=200),
+  sort_by: Literal["name", "price", "amount", "category", "status"] | None = None,
+  sort_direction: Literal["asc", "desc"] = "asc",
+  all_products: bool = Query(default=False, alias="all"),
+  session: AsyncSession = Depends(get_db),
+) -> AdminProductsResponse:
+  return await ProductService.get_products(
+    session,
+    page_index,
+    fetch_all=all_products,
+    page_size=page_size,
+    search=search,
+    sort_by=sort_by,
+    sort_direction=sort_direction,
+  )
+
+
+@router.get('/stats', response_model=ProductStatsResponse)
+async def get_product_stats(session: AsyncSession = Depends(get_db)) -> ProductStatsResponse:
+  return await ProductService.get_product_stats(session)
 
 
 @router.get('/attributes', response_model=ProductsAttributesResponse)
