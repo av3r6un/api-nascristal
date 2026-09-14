@@ -57,6 +57,7 @@ class MoySkladImportService:
     rows: Sequence[Mapping[str, Any]],
     archive_missing: bool,
   ) -> tuple[list[Product], list[Mapping[str, Any]]]:
+    rows = [row for row in rows if not self._is_archived(row)]
     product_rows = [row for row in rows if self._entity_type(row) == "product"]
     variants_by_product: dict[uuid.UUID, list[Mapping[str, Any]]] = {}
     for row in rows:
@@ -158,7 +159,7 @@ class MoySkladImportService:
       product.code = self._text(data, "code")
       product.external_code = self._text(data, "externalCode")
       product.server_updated = self._datetime(data.get("updated"))
-      product.archived = bool(data.get("archived", False))
+      product.archived = self._is_archived(data)
       products[id(product)] = (product, variants)
 
     await self.session.flush()
@@ -215,7 +216,7 @@ class MoySkladImportService:
         variant.external_code = self._text(data, "externalCode")
         variant.sku = self._optional_text(data.get("article")) or variant.code
         variant.image_key = self._image_key(data)
-        variant.archived = bool(data.get("archived", False))
+        variant.archived = self._is_archived(data)
         result[id(variant)] = (variant, data)
 
     await self.session.flush()
@@ -342,6 +343,16 @@ class MoySkladImportService:
       item for item in items
       if str(item.get("name", "")).strip().casefold() != "id изображения".casefold()
     ]
+
+  def _is_archived(self, data: Mapping[str, Any]) -> bool:
+    value = data.get("archived", False)
+    if isinstance(value, bool):
+      return value
+    if isinstance(value, (int, float)):
+      return value != 0
+    if isinstance(value, str):
+      return value.strip().casefold() in {"1", "true", "yes", "да"}
+    return bool(value)
 
   def _image_keys(self, variants: Sequence[Mapping[str, Any]]) -> list[str]:
     keys = []
