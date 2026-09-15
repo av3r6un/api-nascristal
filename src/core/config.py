@@ -29,16 +29,12 @@ class Settings(BaseSettings):
   YOOKASSA_RECEIPT_VAT_CODE: int = 1
   YOOKASSA_RECEIPT_PAYMENT_MODE: str = "full_prepayment"
   YOOKASSA_RECEIPT_PAYMENT_SUBJECT: str = "commodity"
-  YOOKASSA_RECEIPT_DELIVERY_PAYMENT_SUBJECT: str = "service"
-  YOOKASSA_RECEIPT_DELIVERY_DESCRIPTION: str = "Delivery"
   MOYSKLAD_TOKEN: str | None = None
-  MOYSKLAD_WEBHOOK_SECRET: str | None = None
   MOYSKLAD_CHECKOUT_SYNC_ENABLED: bool = False
   MOYSKLAD_ORGANIZATION_ID: str | None = None
   MOYSKLAD_COUNTERPARTY_ID: str | None = None
   MOYSKLAD_STORE_ID: str | None = None
   MOYSKLAD_SALES_CHANNEL_ID: str | None = None
-  MOYSKLAD_DELIVERY_SERVICE_ID: str | None = None
   MOYSKLAD_ORDER_STATES: dict[str, str] = {}
   DEV_PURCHASE_DELETE_ENABLED: bool = False
 

@@ -45,7 +45,6 @@ async def lock_purchase(session: AsyncSession, purchase_id: int) -> Purchase:
 
 def build_order_payload(purchase: Purchase, products_by_id: dict) -> dict:
   contact = normalize_contact_info(purchase.contact_info)
-  delivery = contact['delivery']
   positions = []
   total = Decimal(0)
   for product_id in dict.fromkeys(purchase.product_ids):
@@ -58,20 +57,14 @@ def build_order_payload(purchase: Purchase, products_by_id: dict) -> dict:
       raise JSRError("bad_request", message=f"Invalid price for product {product_id}")
     positions.append({"quantity": quantity, "price": int(price), "assortment": entity_ref('variant', str(product.uuid))})
     total += price * quantity
-  if delivery['cost'] < 0:
-    raise JSRError("bad_request", message="Delivery cost cannot be negative")
-  if delivery['cost'] < 0:
-    raise JSRError("bad_request", message="Delivery cost cannot be negative")
-  # Delivery is represented in the YooKassa receipt, not as a MoySklad item.
-  if not positions or len(positions) > 1000 or total + Decimal(delivery['cost']) * 100 != Decimal(purchase.final_price) * 100:
-    raise JSRError("bad_request", message="Order total does not match items and delivery")
+  if not positions or len(positions) > 1000 or total != Decimal(purchase.final_price) * 100:
+    raise JSRError("bad_request", message="Order total does not match items")
   payload = {
     "externalCode": purchase.uuid,
     "syncId": str(sync_uuid(purchase)),
     "organization": entity_ref('organization', settings.MOYSKLAD_ORGANIZATION_ID),
     "agent": entity_ref('counterparty', settings.MOYSKLAD_COUNTERPARTY_ID),
     "positions": positions,
-    "shipmentAddress": delivery['address'],
     "description": '\n'.join([
       'Источник: сайт nascrystal.ru',
       f'Среда: {settings.STAGE}',
