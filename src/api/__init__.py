@@ -5,7 +5,6 @@ from .feedback import router as feedback_router
 from .i18n import router as i18n_router
 from .logs import router as logs_router
 from .moysklad import router as moysklad_router
-from .moysklad_webhook import router as moysklad_webhook_router
 from .payments import router as payments_router
 from .products import router as products_router
 from .purchases import router as purchases_router
@@ -22,7 +21,6 @@ routers = (
   i18n_router,
   logs_router,
   moysklad_router,
-  moysklad_webhook_router,
   payments_router,
   products_router,
   static_router,

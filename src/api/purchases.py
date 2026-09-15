@@ -10,18 +10,18 @@ from sqlalchemy.orm import selectinload
 from src.core.config import settings
 from src.core.database import get_db
 from src.exceptions import JSRError
-from src.models import AttributeOption, Payment, ProductAttribute, ProductVariant, Purchase, PurchaseStatus
+from src.models import AttributeOption, Offer, Payment, ProductAttribute, ProductVariant, Purchase, PurchaseStatus
 
 Product = ProductVariant
 PropertyOption = AttributeOption
 from src.models.payment import PaymentStatus as ProviderPaymentStatus
-from src.schemas.contact import normalize_contact_info, normalize_delivery_info
+from src.schemas.contact import normalize_contact_info
 from src.schemas.purchase import (
   PurchaseCreateRequest,
-  PurchaseDeliveryPatchRequest,
   PurchaseResponse,
   PurchasesResponse,
   PurchaseTrackingResponse,
+  PurchaseUpdateRequest,
 )
 from src.services.purchase_sync import build_order_payload, lock_purchase, sync_purchase, sync_purchase_status
 from src.services.payment_sync import apply_successful_payment, refresh_payment_state
@@ -46,7 +46,6 @@ def _contact_info(payload: PurchaseCreateRequest) -> dict:
   return {
     "name": payload.customer.name,
     "phone": payload.customer.phone,
-    "delivery": payload.delivery.model_dump(),
     "username": payload.customer.username,
     "email": payload.customer.email,
   }
@@ -70,6 +69,31 @@ async def _get_products_or_404(session: AsyncSession, product_ids: list[int]) ->
   if missing:
     raise JSRError("not_found", message=f"Products not found: {', '.join(map(str, missing))}")
   return [products_by_id[product_id] for product_id in unique_product_ids]
+
+
+async def _get_products_by_offer_ids_or_404(session: AsyncSession, offer_ids: list[int]) -> dict[int, Product]:
+  unique_offer_ids = list(dict.fromkeys(offer_ids))
+  query = (
+    select(Product)
+    .join(Offer, Offer.variant_id == Product.id)
+    .options(
+      selectinload(Product.attributes)
+      .selectinload(ProductAttribute.option)
+      .selectinload(AttributeOption.attribute)
+    )
+    .options(selectinload(Product.offer))
+    .where(Offer.id.in_(unique_offer_ids))
+  )
+  products = (await session.execute(query)).scalars().all()
+  products_by_offer_id = {
+    product.offer.id: product
+    for product in products
+    if product.offer is not None
+  }
+  missing = [offer_id for offer_id in unique_offer_ids if offer_id not in products_by_offer_id]
+  if missing:
+    raise JSRError("not_found", message=f"Offers not found: {', '.join(map(str, missing))}")
+  return products_by_offer_id
 
 
 def _resolve_property_option_eids(product: Product, properties: list[str]) -> list[str]:
@@ -119,23 +143,6 @@ def _format_money(value: Decimal) -> str:
   return format(value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP), "f")
 
 
-def _delivery_price(delivery) -> Decimal:
-  return _money(normalize_delivery_info(delivery)["cost"])
-
-
-def _delivery_description(delivery) -> str:
-  normalized_delivery = normalize_delivery_info(delivery)
-  if not normalized_delivery["type"] and not normalized_delivery["address"]:
-    return settings.YOOKASSA_RECEIPT_DELIVERY_DESCRIPTION
-
-  description = " ".join(
-    value
-    for value in (normalized_delivery["type"], normalized_delivery["address"])
-    if value
-  )
-  return (description or settings.YOOKASSA_RECEIPT_DELIVERY_DESCRIPTION)[:128]
-
-
 def _primary_offer(product: Product):
   offer = product.offer
   if offer is None or not offer.is_active:
@@ -153,7 +160,6 @@ def _price_int(value: Decimal) -> int:
 def _build_receipt_for_purchase(
   *,
   customer_email: str | None,
-  delivery,
   price: int,
   products_by_id: dict[int, Product],
   quantities_by_product: dict[int, int],
@@ -183,21 +189,6 @@ def _build_receipt_for_purchase(
       "payment_subject": settings.YOOKASSA_RECEIPT_PAYMENT_SUBJECT,
     })
 
-  delivery_amount = _delivery_price(delivery)
-  if delivery_amount > 0:
-    total += delivery_amount
-    items.append({
-      "description": _delivery_description(delivery),
-      "quantity": 1,
-      "amount": {
-        "value": _format_money(delivery_amount),
-        "currency": "RUB",
-      },
-      "vat_code": settings.YOOKASSA_RECEIPT_VAT_CODE,
-      "payment_mode": settings.YOOKASSA_RECEIPT_PAYMENT_MODE,
-      "payment_subject": settings.YOOKASSA_RECEIPT_DELIVERY_PAYMENT_SUBJECT,
-    })
-
   expected_total = _money(price)
   if total != expected_total:
     raise JSRError(
@@ -213,24 +204,14 @@ def _build_receipt_for_purchase(
   }
 
 
-def _build_receipt(payload: PurchaseCreateRequest, products_by_id: dict[int, Product], quantities_by_product: dict[int, int]) -> dict:
-  return _build_receipt_for_purchase(
-    customer_email=payload.customer.email,
-    delivery=payload.delivery,
-    price=payload.price,
-    products_by_id=products_by_id,
-    quantities_by_product=quantities_by_product,
-  )
-
-
-def _calculate_purchase_total(products_by_id: dict[int, Product], quantities_by_product: dict[int, int], delivery) -> Decimal:
+def _calculate_purchase_total(products_by_id: dict[int, Product], quantities_by_product: dict[int, int]) -> Decimal:
   total = Decimal("0.00")
   for product_id, quantity in quantities_by_product.items():
     product = products_by_id.get(product_id)
     if product is None:
       raise JSRError("not_found", message=f"Product not found: {product_id}")
     total += _money(_primary_offer(product).amount) * quantity
-  return total + _delivery_price(delivery)
+  return total
 
 
 def _purchase_quantities_as_ints(purchase: Purchase) -> dict[int, int]:
@@ -240,15 +221,11 @@ def _purchase_quantities_as_ints(purchase: Purchase) -> dict[int, int]:
 def _payment_fingerprint(
   *,
   contact_info: dict,
-  delivery,
   products_by_id: dict[int, Product],
   quantities_by_product: dict[int, int],
 ) -> dict:
-  normalized_delivery = normalize_delivery_info(delivery)
   return {
     "email": contact_info.get("email") or "",
-    "delivery_type": normalized_delivery["type"],
-    "delivery_cost": normalized_delivery["cost"],
     "items": tuple(
       sorted(
         (
@@ -293,18 +270,11 @@ def _serialize_payment(payment: Payment | None) -> dict | None:
 
 def _serialize_purchase_tracking(payment: Payment | None, purchase: Purchase) -> dict:
   contact_info = normalize_contact_info(purchase.contact_info)
-  delivery_price = _delivery_price(contact_info.get("delivery"))
-  price_without_delivery = _money(purchase.final_price) - delivery_price
-  price_payload = (
-    {"final_price": purchase.final_price}
-    if delivery_price > 0
-    else {"price": _price_int(price_without_delivery)}
-  )
   return {
     "purchase": {
       "id": purchase.id,
       "created_ts": purchase.created_ts,
-      **price_payload,
+      "price": purchase.final_price,
       "status": purchase.status.value,
       "contact_info": contact_info,
     },
@@ -369,7 +339,7 @@ def _serialize_purchase(
   def serialize_product(product_id: int, product: Product) -> dict:
     offer = _primary_offer(product)
     return {
-      "id": product.id,
+      "id": offer.id,
       "sku": product.sku,
       "name": product.name,
       "price": _price_int(_money(offer.amount)),
@@ -476,7 +446,6 @@ async def _create_card_payment_for_purchase(
 
   contact_info = normalize_contact_info(purchase.contact_info)
   customer_name = contact_info.get("name") or purchase.uuid
-  delivery = contact_info.get("delivery")
 
   should_reuse_payment = (
     payment is not None
@@ -510,7 +479,6 @@ async def _create_card_payment_for_purchase(
     },
     receipt=_build_receipt_for_purchase(
       customer_email=contact_info.get("email"),
-      delivery=delivery,
       price=purchase.final_price,
       products_by_id=products_by_id,
       quantities_by_product=quantities_by_product,
@@ -539,6 +507,30 @@ async def _create_card_payment_for_purchase(
   return payment
 
 
+async def _start_purchase_payment(
+  *,
+  session: AsyncSession,
+  purchase: Purchase,
+  products_by_id: dict[int, Product],
+  patch_moysklad_order: bool = False,
+) -> Payment:
+  purchase.status = PurchaseStatus.AWAITING_PAYMENT
+  if settings.MOYSKLAD_CHECKOUT_SYNC_ENABLED:
+    await sync_purchase(session, purchase, products_by_id, patch=patch_moysklad_order)
+
+  payment = await _create_card_payment_for_purchase(
+    session=session,
+    purchase=purchase,
+    products_by_id=products_by_id,
+    quantities_by_product=_purchase_quantities_as_ints(purchase),
+  )
+  await session.commit()
+  await session.refresh(purchase)
+  await session.refresh(payment)
+  await apply_successful_payment(session, payment, purchase)
+  return payment
+
+
 @router.post("/", response_model=PurchaseResponse, status_code=200)
 async def create_purchase(
   payload: PurchaseCreateRequest,
@@ -549,20 +541,27 @@ async def create_purchase(
     existing = await Purchase.first(session, uuid=str(idempotency_key))
     if existing is not None:
       purchase = await lock_purchase(session, existing.id)
+      if purchase.status not in {PurchaseStatus.CREATED, PurchaseStatus.AWAITING_PAYMENT}:
+        return await _serialize_purchase_with_refs(session, purchase)
       products_by_id = await _load_product_map(session, purchase.product_ids)
-      if settings.MOYSKLAD_CHECKOUT_SYNC_ENABLED:
-        await sync_purchase(session, purchase, products_by_id)
-      await session.commit()
-      await session.refresh(purchase)
+      await _start_purchase_payment(
+        session=session,
+        purchase=purchase,
+        products_by_id=products_by_id,
+        patch_moysklad_order=True,
+      )
       return await _serialize_purchase_with_refs(session, purchase)
-  product_ids = [item.id for item in payload.items]
-  products = await _get_products_or_404(session, product_ids)
+  offer_ids = [item.id for item in payload.items]
+  products_by_offer_id = await _get_products_by_offer_ids_or_404(session, offer_ids)
+  product_ids = [products_by_offer_id[offer_id].id for offer_id in offer_ids]
+  products = list(products_by_offer_id.values())
   products_by_id = {product.id: product for product in products}
   properties_by_product: dict[int, list[str]] = {}
   quantities_by_product: dict[int, int] = {}
   for item in payload.items:
-    properties_by_product.setdefault(item.id, []).extend(item.properties)
-    quantities_by_product[item.id] = quantities_by_product.get(item.id, 0) + item.quantity.value
+    product_id = products_by_offer_id[item.id].id
+    properties_by_product.setdefault(product_id, []).extend(item.properties)
+    quantities_by_product[product_id] = quantities_by_product.get(product_id, 0) + item.quantity.value
 
   contact_info = _contact_info(payload)
   purchase = Purchase(
@@ -577,8 +576,8 @@ async def create_purchase(
   # Validate before persisting. The Purchase itself is the durable retry payload.
   if settings.MOYSKLAD_CHECKOUT_SYNC_ENABLED:
     build_order_payload(purchase, products_by_id)
-  elif _calculate_purchase_total(products_by_id, quantities_by_product, payload.delivery) != _money(payload.price):
-    raise JSRError('bad_request', message='Order total does not match items and delivery')
+  elif _calculate_purchase_total(products_by_id, quantities_by_product) != _money(payload.price):
+    raise JSRError('bad_request', message='Order total does not match items')
   session.add(purchase)
   try:
     await session.commit()
@@ -592,10 +591,11 @@ async def create_purchase(
     purchase = existing
   purchase = await lock_purchase(session, purchase.id)
   products_by_id = await _load_product_map(session, purchase.product_ids)
-  if settings.MOYSKLAD_CHECKOUT_SYNC_ENABLED:
-    await sync_purchase(session, purchase, products_by_id)
-  await session.commit()
-  await session.refresh(purchase)
+  await _start_purchase_payment(
+    session=session,
+    purchase=purchase,
+    products_by_id=products_by_id,
+  )
   return await _serialize_purchase_with_refs(session, purchase)
 
 
@@ -670,17 +670,20 @@ async def get_purchase(purchase_id: int, session: AsyncSession = Depends(get_db)
 @router.patch("/{purchase_id}", response_model=PurchaseResponse, status_code=200)
 async def update_purchase(
   purchase_id: int,
-  payload: PurchaseDeliveryPatchRequest,
+  payload: PurchaseUpdateRequest,
   session: AsyncSession = Depends(get_db),
 ) -> dict:
   purchase = await lock_purchase(session, purchase_id)
   if payload.products is not None:
-    product_ids = [item.id for item in payload.products]
+    offer_ids = [item.id for item in payload.products]
+    products_by_offer_id = await _get_products_by_offer_ids_or_404(session, offer_ids)
+    product_ids = [products_by_offer_id[offer_id].id for offer_id in offer_ids]
     quantities_by_product: dict[int, int] = {}
     properties_by_product: dict[int, list[str]] = {}
     for item in payload.products:
-      quantities_by_product[item.id] = quantities_by_product.get(item.id, 0) + item.quantity.value
-      properties_by_product.setdefault(item.id, []).extend(property_item.value for property_item in item.properties)
+      product_id = products_by_offer_id[item.id].id
+      quantities_by_product[product_id] = quantities_by_product.get(product_id, 0) + item.quantity.value
+      properties_by_product.setdefault(product_id, []).extend(property_item.value for property_item in item.properties)
   else:
     product_ids = purchase.product_ids
     quantities_by_product = _purchase_quantities_as_ints(purchase)
@@ -695,7 +698,6 @@ async def update_purchase(
   old_contact_info = normalize_contact_info(purchase.contact_info)
   old_fingerprint = _payment_fingerprint(
     contact_info=old_contact_info,
-    delivery=old_contact_info["delivery"],
     products_by_id=products_by_id,
     quantities_by_product=old_quantities_by_product,
   )
@@ -704,21 +706,19 @@ async def update_purchase(
     if payload.contact_info is not None
     else normalize_contact_info(purchase.contact_info)
   )
-  delivery = payload.delivery.model_dump() if payload.delivery is not None else contact_info["delivery"]
   new_fingerprint = _payment_fingerprint(
     contact_info=contact_info,
-    delivery=delivery,
     products_by_id=products_by_id,
     quantities_by_product=quantities_by_product,
   )
   payment_inputs_changed = old_fingerprint != new_fingerprint
 
-  calculated_total = _calculate_purchase_total(products_by_id, quantities_by_product, delivery)
+  calculated_total = _calculate_purchase_total(products_by_id, quantities_by_product)
   calculated_final_price = _price_int(calculated_total)
   if payload.final_price is not None and payload.final_price != calculated_final_price:
     raise JSRError(
       "bad_request",
-      message=f"Final price {payload.final_price} does not match items and delivery total {calculated_final_price}",
+      message=f"Final price {payload.final_price} does not match items total {calculated_final_price}",
     )
 
   if payload.products is not None:
@@ -727,7 +727,6 @@ async def update_purchase(
     purchase.product_quantities = _normalize_quantities_by_product(quantities_by_product)
     purchase.quantity = sum(quantities_by_product.values())
 
-  contact_info["delivery"] = normalize_delivery_info(delivery)
   purchase.contact_info = contact_info
   purchase.final_price = payload.final_price if payload.final_price is not None else calculated_final_price
   existing_payment = await Payment.first(session, id=purchase.payment_id) if purchase.payment_id is not None else None
@@ -746,13 +745,12 @@ async def update_purchase(
     raise JSRError("bad_request", message="Cannot change payment details for an already paid purchase")
   if purchase.status == PurchaseStatus.AWAITING_PAYMENT and payment_inputs_changed:
     await _cancel_payment_for_purchase(existing_payment)
-  purchase.status = PurchaseStatus.AWAITING_PAYMENT
-  # mailing here
-
-  if settings.MOYSKLAD_CHECKOUT_SYNC_ENABLED:
-    await sync_purchase(session, purchase, products_by_id, patch=True)
-  await session.commit()
-  await session.refresh(purchase)
+  await _start_purchase_payment(
+    session=session,
+    purchase=purchase,
+    products_by_id=products_by_id,
+    patch_moysklad_order=True,
+  )
   return await _serialize_purchase_with_refs(session, purchase)
 
 

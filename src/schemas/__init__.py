@@ -16,9 +16,9 @@ from .product import (
 )
 from .purchase import (
   PurchaseCreateRequest,
-  PurchaseDeliveryPatchRequest,
   PurchasePatchRequest,
   PurchaseResponse,
+  PurchaseUpdateRequest,
   PurchasesResponse,
 )
 from .static import StaticPageResponse, StaticPageRequest, StaticPagesResponse

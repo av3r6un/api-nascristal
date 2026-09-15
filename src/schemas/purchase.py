@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field
 
 from src.models.purchase import PurchaseStatus
-from src.schemas.contact import ContactInfo, DeliveryInfo
+from src.schemas.contact import ContactInfo
 from src.schemas.payment import PaymentInfo, PaymentTrackingInfo
 
 
@@ -11,7 +11,7 @@ class PurchaseQuantity(BaseModel):
 
 
 class PurchaseCreateItem(BaseModel):
-  id: int
+  id: int = Field(gt=0, description="Offer ID")
   properties: list[str] = Field(default_factory=list)
   quantity: PurchaseQuantity
 
@@ -20,12 +20,11 @@ class PurchaseCustomer(BaseModel):
   name: str
   phone: str
   username: str | None = None
-  email: str | None = None
+  email: str = Field(min_length=3)
 
 
 class PurchaseCreateRequest(BaseModel):
   customer: PurchaseCustomer
-  delivery: DeliveryInfo
   items: list[PurchaseCreateItem] = Field(min_length=1)
   price: int = Field(ge=0)
 
@@ -54,7 +53,7 @@ class PurchasePropertyItem(BaseModel):
 
 
 class PurchasePatchProductItem(BaseModel):
-  id: int
+  id: int = Field(gt=0, description="Offer ID")
   sku: str | None = None
   name: str | None = None
   price: int | None = Field(default=None, ge=0)
@@ -62,15 +61,14 @@ class PurchasePatchProductItem(BaseModel):
   properties: list[PurchasePropertyItem] = Field(default_factory=list)
 
 
-class PurchaseDeliveryPatchRequest(BaseModel):
+class PurchaseUpdateRequest(BaseModel):
   contact_info: PurchaseContactInfo | None = None
-  delivery: DeliveryInfo | None = None
   products: list[PurchasePatchProductItem] | None = Field(default=None, min_length=1)
   final_price: int | None = Field(default=None, ge=0)
 
 
 class PurchaseProductItem(BaseModel):
-  id: int
+  id: int = Field(gt=0, description="Offer ID")
   sku: str
   name: str
   price: int
