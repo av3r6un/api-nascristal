@@ -12,6 +12,7 @@ from .static import router as static_router
 from .settings import router as settings_router
 from .yookassa import router as yookassa_router
 from .stock import router as stock_router
+from .catalog import router as catalog_router
 
 routers = (
   auth_router,
@@ -28,6 +29,7 @@ routers = (
   settings_router,
   yookassa_router,
   stock_router,
+  catalog_router,
 )
 
 # BEGIN DEV-ONLY PURCHASE DELETION: remove this block and dev_purchases.py to exclude it.
