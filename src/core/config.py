@@ -30,6 +30,8 @@ class Settings(BaseSettings):
   YOOKASSA_RECEIPT_PAYMENT_MODE: str = "full_prepayment"
   YOOKASSA_RECEIPT_PAYMENT_SUBJECT: str = "commodity"
   MOYSKLAD_TOKEN: str | None = None
+  MOYSKLAD_WEBHOOK_SECRET: str | None = None
+  MOYSKLAD_ACCOUNT_ID: str | None = None
   MOYSKLAD_CHECKOUT_SYNC_ENABLED: bool = False
   MOYSKLAD_ORGANIZATION_ID: str | None = None
   MOYSKLAD_COUNTERPARTY_ID: str | None = None
