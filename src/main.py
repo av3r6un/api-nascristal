@@ -12,6 +12,9 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from src.core.action_logging import WebhookAccessFilter, get_actions_logger
 from src.core.database import session_maker
+from src.core.config import settings
+from src.services.moysklad_client import MoySkladClient
+from src.services.moysklad_webhook_registration import manage_webhooks, registration_lock
 from src.exceptions import JSRError
 from src.utils.auth import extract_bearer_token, user_from_token
 from src.api import routers
@@ -22,6 +25,17 @@ from src.services import ServerSettings
 async def lifespan(app: FastAPI):
   async with session_maker() as session:
     await ServerSettings.load(session)
+  logger = logging.getLogger('uvicorn.error')
+  if settings.MOYSKLAD_TOKEN and settings.MOYSKLAD_WEBHOOK_URL:
+    try:
+      async with registration_lock, MoySkladClient(timeout=5.0) as client:
+        result = await manage_webhooks(client, 'startup')
+      logger.info('MoySklad webhooks: enabled=%d/%d created=%d updated=%d',
+        result['enabled'], result['expected'], result['created'], result['updated'])
+    except Exception as exc:
+      logger.warning('MoySklad webhook registration failed (%s)', type(exc).__name__)
+  else:
+    logger.warning('MoySklad webhook registration skipped: token or webhook URL not configured')
   yield
 
 

@@ -1,4 +1,5 @@
 import secrets
+import logging
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
@@ -47,4 +48,7 @@ async def moysklad_webhook(
 
   async with session.begin():
     await save_webhook_events(session, payload.events, request_id)
+  logging.getLogger('uvicorn.error').info(
+    'MoySklad webhook accepted: request_id=%s events=%d', request_id, len(payload.events),
+  )
   return Response(status_code=204)
