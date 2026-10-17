@@ -13,6 +13,7 @@ from src.services.moysklad_webhook import save_webhook_events
 
 
 router = APIRouter(tags=['moysklad'])
+logger = logging.getLogger('uvicorn.error')
 
 
 @router.post('/webhooks/moysklad', status_code=204)
@@ -31,6 +32,10 @@ async def moysklad_webhook(
   if secret is None or not secrets.compare_digest(
     secret.encode(), settings.MOYSKLAD_WEBHOOK_SECRET.encode(),
   ):
+    logger.warning(
+      'MoySklad webhook rejected: reason=%s request_id=%s',
+      'secret_missing' if secret is None else 'secret_mismatch', request_id,
+    )
     raise HTTPException(403, 'Invalid webhook secret')
 
   # Bound memory use even when Content-Length is absent.
@@ -44,11 +49,12 @@ async def moysklad_webhook(
   except ValidationError:
     raise HTTPException(422, 'Invalid MoySklad webhook payload')
   if any(event.accountId != account_id for event in payload.events):
+    logger.warning('MoySklad webhook rejected: reason=account_mismatch request_id=%s', request_id)
     raise HTTPException(403, 'Unexpected MoySklad account')
 
   async with session.begin():
     await save_webhook_events(session, payload.events, request_id)
-  logging.getLogger('uvicorn.error').info(
+  logger.info(
     'MoySklad webhook accepted: request_id=%s events=%d', request_id, len(payload.events),
   )
   return Response(status_code=204)
