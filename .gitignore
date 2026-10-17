@@ -15,6 +15,10 @@ wheels/
 *.db
 docker-compose.example.yml
 tests/
+!tests/
+tests/*
+!tests/test_product_service.py
+!tests/test_moysklad_webhook.py
 1c_exchange
 .uv_cache
 /*.json

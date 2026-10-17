@@ -6,6 +6,7 @@ from .locale_overrides import LocaleOverride
 from .static import StaticPage, StaticPagesTranslation
 from .settings import Setting
 from .change_event import ChangeEvent
+from .sync import SyncTask, SyncAttempt
 from .products import (
   Attribute,
   AttributeOption,

@@ -8,6 +8,18 @@ LOG_FILE_PATH = LOGS_DIR / "actions.log"
 LOGGER_NAME = "nascrystal.actions"
 
 
+class WebhookAccessFilter(logging.Filter):
+  def filter(self, record: logging.LogRecord) -> bool:
+    if not isinstance(record.args, tuple) or len(record.args) != 5:
+      return True
+    client, method, url, protocol, status = record.args
+    if isinstance(url, str):
+      path = url.split('?', 1)[0]
+      if path == '/webhooks' or path.startswith('/webhooks/'):
+        record.args = client, method, path, protocol, status
+    return True
+
+
 def get_actions_logger() -> logging.Logger:
   LOGS_DIR.mkdir(parents=True, exist_ok=True)
 

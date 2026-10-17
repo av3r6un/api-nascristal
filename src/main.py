@@ -1,4 +1,5 @@
 import json
+import logging
 from contextlib import asynccontextmanager
 from time import perf_counter
 from typing import Any
@@ -9,7 +10,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from src.core.action_logging import get_actions_logger
+from src.core.action_logging import WebhookAccessFilter, get_actions_logger
 from src.core.database import session_maker
 from src.exceptions import JSRError
 from src.utils.auth import extract_bearer_token, user_from_token
@@ -29,6 +30,7 @@ _SUCCESS_WRAP_EXCLUDED_PATHS = {"/openapi.json", "/docs", "/docs/oauth2-redirect
 SECURED = '/api'
 ACTION_LOGGING_PREFIXES = ("/api",)
 actions_logger = get_actions_logger()
+logging.getLogger('uvicorn.access').addFilter(WebhookAccessFilter())
 BODY_LOG_PREVIEW_LIMIT = 500
 BODY_LOG_CAPTURE_LIMIT = 64 * 1024
 SENSITIVE_BODY_KEYS = {
