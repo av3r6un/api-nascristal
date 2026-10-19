@@ -48,10 +48,11 @@ class MoySkladClient:
     *,
     params: Mapping[str, Any] | None = None,
     payload: Any = None,
+    headers: Mapping[str, str] | None = None,
   ) -> dict[str, Any] | list[Any] | None:
     """Выполнить произвольный запрос к API и разобрать JSON-ответ."""
     self._check_url(path)
-    response = await self._http.request(method, path, params=params, json=payload)
+    response = await self._http.request(method, path, params=params, json=payload, headers=headers)
 
     if response.is_error:
       raise self._make_error(response)
@@ -73,8 +74,10 @@ class MoySkladClient:
     entity: str,
     entity_id: str,
     payload: Any,
+    *,
+    headers: Mapping[str, str] | None = None,
   ) -> dict[str, Any] | list[Any] | None:
-    return await self.request("PUT", f"/entity/{entity}/{entity_id}", payload=payload)
+    return await self.request("PUT", f"/entity/{entity}/{entity_id}", payload=payload, headers=headers)
 
   async def delete(self, entity: str, entity_id: str) -> None:
     await self.request("DELETE", f"/entity/{entity}/{entity_id}")
