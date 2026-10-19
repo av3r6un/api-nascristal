@@ -1,6 +1,7 @@
 import json
+import asyncio
 import logging
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from time import perf_counter
 from typing import Any
 from urllib.parse import parse_qsl, urlencode
@@ -15,6 +16,7 @@ from src.core.database import session_maker
 from src.core.config import settings
 from src.services.moysklad_client import MoySkladClient
 from src.services.moysklad_webhook_registration import manage_webhooks, registration_lock
+from src.services.moysklad_sync import run_moysklad_sync
 from src.exceptions import JSRError
 from src.utils.auth import extract_bearer_token, user_from_token
 from src.api import routers
@@ -36,7 +38,14 @@ async def lifespan(app: FastAPI):
       logger.warning('MoySklad webhook registration failed (%s)', type(exc).__name__)
   else:
     logger.warning('MoySklad webhook registration skipped: token or webhook URL not configured')
-  yield
+  sync_task = asyncio.create_task(run_moysklad_sync()) if settings.MOYSKLAD_TOKEN else None
+  try:
+    yield
+  finally:
+    if sync_task:
+      sync_task.cancel()
+      with suppress(asyncio.CancelledError):
+        await sync_task
 
 
 app = FastAPI(title="nascrystal API", version="0.1.0", lifespan=lifespan)

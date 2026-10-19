@@ -2,6 +2,7 @@ from pathlib import Path
 from typing import Literal
 import os
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import PositiveInt
 
 
 class Settings(BaseSettings):
@@ -30,6 +31,7 @@ class Settings(BaseSettings):
   YOOKASSA_RECEIPT_PAYMENT_MODE: str = "full_prepayment"
   YOOKASSA_RECEIPT_PAYMENT_SUBJECT: str = "commodity"
   MOYSKLAD_TOKEN: str | None = None
+  MOYSKLAD_SYNC_INTERVAL: PositiveInt = 30
   MOYSKLAD_WEBHOOK_URL: str | None = None
   MOYSKLAD_WEBHOOK_SECRET: str | None = None
   MOYSKLAD_ACCOUNT_ID: str | None = None

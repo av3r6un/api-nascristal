@@ -19,6 +19,8 @@ tests/
 tests/*
 !tests/test_product_service.py
 !tests/test_moysklad_webhook.py
+!tests/test_moysklad_webhook_registration.py
+!tests/test_moysklad_sync.py
 1c_exchange
 .uv_cache
 /*.json
