@@ -53,6 +53,32 @@ class MoySkladImportService:
   ) -> tuple[list[Product], list[Mapping[str, Any]]]:
     return await cls(session)._import_assortment(rows, archive_missing=True)
 
+  async def sync_product(self, product_data, variants_data, *, complete: bool) -> Product:
+    """Update one product without archiving the rest of the catalog."""
+    rows = [(product_data, variants_data)]
+    categories = await self._load_categories(rows)
+    products = await self._load_products(rows, categories)
+    variants = await self._load_variants(products)
+    attributes = await self._load_attributes(variants)
+    options = await self._load_attribute_options(variants, attributes)
+    await self._sync_attributes(variants, attributes, options)
+    await self._sync_offers(variants)
+    product = products[0][0]
+    if complete:
+      missing_conditions = (
+        ProductVariant.product_id == product.id,
+        ProductVariant.uuid.not_in([variant.uuid for variant, _ in variants]),
+      )
+      missing = select(ProductVariant.id).where(*missing_conditions)
+      await self.session.execute(update(Offer).where(Offer.variant_id.in_(missing)).values(is_active=False))
+      await self.session.execute(update(ProductVariant).where(*missing_conditions).values(archived=True))
+    if product.archived:
+      await self.session.execute(update(Offer).where(
+        Offer.variant_id.in_(select(ProductVariant.id).where(ProductVariant.product_id == product.id)),
+      ).values(is_active=False))
+    await self.session.flush()
+    return product
+
   async def _import_assortment(
     self,
     rows: Sequence[Mapping[str, Any]],
