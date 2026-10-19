@@ -81,7 +81,8 @@ class ProductImageUploadService:
         characteristics.append(image_characteristic)
       else:
         image_characteristic["value"] = object_key
-      await client.update("variant", str(variant_id), {"characteristics": characteristics})
+      headers = {"X-Lognex-WebHook-DisableByPrefix": settings.MOYSKLAD_WEBHOOK_URL} if settings.MOYSKLAD_WEBHOOK_URL else None
+      await client.update("variant", str(variant_id), {"characteristics": characteristics}, headers=headers)
     except Exception:
       await asyncio.to_thread(self.s3.remove_object, settings.S3_BUCKET, object_key)
       raise
