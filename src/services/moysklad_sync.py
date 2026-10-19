@@ -33,11 +33,14 @@ class MoySkladSyncService:
       return
     if not isinstance(data, dict) or UUID(data['id']) != entity_uuid:
       raise MoySkladImportError('Unexpected catalog entity response')
+    if data.get('archived'):
+      await self.archive_entity(entity_type, entity_uuid)
+      return
 
     if entity_type == 'product':
       product = data
       variants = [row async for row in self.client.iter_entities(
-        'variant', filter=f'productid={entity_uuid};archived=false;archived=true',
+        'variant', filter=f'productid={entity_uuid};archived=false',
       )]
     else:
       variants = [data]
@@ -54,6 +57,8 @@ class MoySkladSyncService:
       quantities = {row['assortmentId']: row['quantity'] for row in stocks}
       for variant in variants:
         # Missing report rows are not evidence of zero stock.
+        if variant['id'] not in quantities:
+          raise MoySkladImportError(f"Stock report missing active variant {variant['id']}")
         variant['quantity'] = quantities[variant['id']]
     await MoySkladImportService(self.session).sync_product(product, variants, complete=entity_type == 'product')
 
@@ -98,7 +103,9 @@ async def process_sync_tasks(sessions=session_maker):
             SyncTask.id == task.id, SyncTask.status == 'processing',
           ).values(status='pending'))
           await session.commit()
-        logger.warning('MoySklad sync failed: entity_uuid=%s error=%s', task.entity_uuid, type(exc).__name__)
+        detail = getattr(exc, 'orig', exc)
+        logger.warning('MoySklad sync failed: entity_uuid=%s error=%s detail=%s',
+          task.entity_uuid, type(exc).__name__, detail)
 
 
 async def run_moysklad_sync():
