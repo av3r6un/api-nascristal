@@ -56,10 +56,8 @@ class MoySkladSyncService:
         raise MoySkladImportError('Expected current variant stock report')
       quantities = {row['assortmentId']: row['quantity'] for row in stocks}
       for variant in variants:
-        # Missing report rows are not evidence of zero stock.
-        if variant['id'] not in quantities:
-          raise MoySkladImportError(f"Stock report missing active variant {variant['id']}")
-        variant['quantity'] = quantities[variant['id']]
+        # The full report omits positions that have never participated in operations.
+        variant['quantity'] = quantities.get(variant['id'], 0)
     await MoySkladImportService(self.session).sync_product(product, variants, complete=entity_type == 'product')
 
   async def archive_entity(self, entity_type: str, entity_uuid: UUID):
@@ -76,16 +74,19 @@ class MoySkladSyncService:
 
 async def process_sync_tasks(sessions=session_maker):
   async with sessions() as session:
-    tasks = (await session.execute(select(SyncTask.id, SyncTask.entity_type, SyncTask.entity_uuid).where(
-      SyncTask.status == 'pending', SyncTask.entity_type.in_(CATALOG_TYPES),
-    ).order_by(SyncTask.updated, SyncTask.id).limit(5))).all()
+    query = select(SyncTask.id, SyncTask.entity_type, SyncTask.entity_uuid, SyncTask.status).where(
+      SyncTask.entity_type.in_(CATALOG_TYPES),
+    ).order_by(SyncTask.updated, SyncTask.id).limit(5)
+    tasks = (await session.execute(query.where(SyncTask.status == 'pending'))).all()
+    if not tasks:
+      tasks = (await session.execute(query.where(SyncTask.status == 'failed'))).all()
   if not tasks:
     return
   async with MoySkladClient() as client:
     for task in tasks:
       async with sessions() as session:
         claimed = await session.execute(update(SyncTask).where(
-          SyncTask.id == task.id, SyncTask.status == 'pending',
+          SyncTask.id == task.id, SyncTask.status == task.status,
         ).values(status='processing'))
         await session.commit()
         if not claimed.rowcount:
@@ -101,7 +102,7 @@ async def process_sync_tasks(sessions=session_maker):
         async with sessions() as session:
           await session.execute(update(SyncTask).where(
             SyncTask.id == task.id, SyncTask.status == 'processing',
-          ).values(status='pending'))
+          ).values(status='failed'))
           await session.commit()
         detail = getattr(exc, 'orig', exc)
         logger.warning('MoySklad sync failed: entity_uuid=%s error=%s detail=%s',

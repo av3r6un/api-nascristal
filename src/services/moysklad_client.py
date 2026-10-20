@@ -66,8 +66,8 @@ class MoySkladClient:
   async def get(self, path: str, **params: Any) -> dict[str, Any] | list[Any] | None:
     return await self.request("GET", path, params=params or None)
 
-  async def create(self, entity: str, payload: Any) -> dict[str, Any] | list[Any] | None:
-    return await self.request("POST", f"/entity/{entity}", payload=payload)
+  async def create(self, entity: str, payload: Any, *, headers: Mapping[str, str] | None = None) -> dict[str, Any] | list[Any] | None:
+    return await self.request("POST", f"/entity/{entity}", payload=payload, headers=headers)
 
   async def update(
     self,

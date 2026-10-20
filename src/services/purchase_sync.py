@@ -107,6 +107,7 @@ async def sync_purchase(session: AsyncSession, purchase: Purchase, products_by_i
     raise JSRError(status=503, message='MoySklad token is not configured')
   try:
     async with MoySkladClient() as client:
+      headers = {'X-Lognex-WebHook-DisableByPrefix': settings.MOYSKLAD_WEBHOOK_URL} if settings.MOYSKLAD_WEBHOOK_URL else None
       if submission:
         # Validate before even constructing a remote mutation.
         try:
@@ -128,12 +129,12 @@ async def sync_purchase(session: AsyncSession, purchase: Purchase, products_by_i
           # Preserve the remote organization, counterparty, channel and sync identity.
           for field in ('organization', 'agent', 'store', 'salesChannel', 'syncId', 'externalCode'):
             payload.pop(field, None)
-          order = await client.update('customerorder', order_id, payload)
+          order = await client.update('customerorder', order_id, payload, headers=headers)
           verify_order(order, purchase, submission)
       else:
         if submission:
           raise JSRError('conflict', message='Linked MoySklad order is unavailable')
-        order = await client.create('customerorder', build_order_payload(purchase, products_by_id))
+        order = await client.create('customerorder', build_order_payload(purchase, products_by_id), headers=headers)
         order_id = verify_order(order, purchase)
       if submission is None:
         session.add(PurchaseSubmission(uuid=sync_uuid(purchase), order_id=order_id, purchase_id=purchase.id))
@@ -182,7 +183,8 @@ async def sync_purchase_status(session: AsyncSession, purchase: Purchase, *, pai
         if state['meta']['href'] != (order.get('state') or {}).get('meta', {}).get('href'):
           payload['state'] = state
       if payload:
-        updated = await client.update('customerorder', order_id, payload)
+        headers = {'X-Lognex-WebHook-DisableByPrefix': settings.MOYSKLAD_WEBHOOK_URL} if settings.MOYSKLAD_WEBHOOK_URL else None
+        updated = await client.update('customerorder', order_id, payload, headers=headers)
         verify_order(updated, purchase, submission)
   except (httpx.HTTPError, MoySkladError) as exc:
     raise JSRError(status=502, message=f'MoySklad status synchronization failed for purchase {purchase.id}; retry payment notification or status check') from exc
