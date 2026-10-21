@@ -1,4 +1,5 @@
 from pydantic import BaseModel
+from uuid import UUID
 
 
 class ChangeEventItem(BaseModel):
@@ -14,5 +15,16 @@ class ChangeEventsResponse(BaseModel):
   items: list[ChangeEventItem]
   
 
+class SyncUpdateItem(BaseModel):
+  id: int
+  entity_type: str
+  entity_uuid: UUID
+  action: str
+  status: str
+  entity_name: str
+  updated_at: int
+
+
 class LastUpdateResponse(BaseModel):
   last_update: int
+  updates: list[SyncUpdateItem]

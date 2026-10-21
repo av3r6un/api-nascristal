@@ -1,10 +1,9 @@
 from fastapi import APIRouter, Depends
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.change_logging import DEFAULT_CHANGE_LIMIT, fetch_recent_changes
 from src.core.database import get_db
-from src.models import ChangeEvent
+from src.services.moysklad_updates import get_last_updates
 from src.schemas import ChangeEventsResponse, LastUpdateResponse
 
 
@@ -22,13 +21,5 @@ async def get_recent_changes(
 
 
 @router.get('/last_update', response_model=LastUpdateResponse, status_code=200)
-async def get_last_update(session: AsyncSession = Depends(get_db)) -> dict[str, int]:
-  latest_import = (
-    await session.execute(
-      select(ChangeEvent)
-      .where(ChangeEvent.event_type == "products.moysklad.imported")
-      .order_by(ChangeEvent.created.desc(), ChangeEvent.id.desc())
-      .limit(1),
-    )
-  ).scalar_one_or_none()
-  return {'last_update': latest_import.created_ts if latest_import else 0}
+async def get_last_update(session: AsyncSession = Depends(get_db)) -> dict:
+  return await get_last_updates(session)
