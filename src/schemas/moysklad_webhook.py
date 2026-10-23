@@ -1,4 +1,5 @@
 from typing import Literal
+from urllib.parse import parse_qs, urlsplit
 from uuid import UUID
 
 from pydantic import BaseModel, Field, model_validator
@@ -37,3 +38,12 @@ class MoyskladStockWebhook(BaseModel):
   stockType: Literal['stock']
   reportType: Literal['all']
   reportUrl: str
+
+  @model_validator(mode='after')
+  def validate_report_url(self):
+    url = urlsplit(self.reportUrl)
+    if (url.scheme != 'https' or url.netloc != 'api.moysklad.ru'
+        or url.path != '/api/remap/1.2/report/stock/all/current'
+        or url.fragment or not parse_qs(url.query).get('changedSince')):
+      raise ValueError('Invalid MoySklad stock report URL')
+    return self

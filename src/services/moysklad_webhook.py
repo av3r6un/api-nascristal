@@ -32,9 +32,9 @@ async def save_webhook_events(session: AsyncSession, events: list[WebhookEvent],
 
 
 async def save_stock_webhook(session: AsyncSession, payload: MoyskladStockWebhook, request_id: UUID):
-  # One task per account coalesces notifications without losing an earlier interval.
+  # Keep each notification's interval; retries with the same requestId reuse its task.
   await save_sync_task(session, dict(
-    entity_type='stock', entity_uuid=payload.accountId, action='UPDATE',
+    entity_type='stock', entity_uuid=request_id, action='UPDATE',
     request_id=request_id, payload=payload.model_dump(mode='json'),
   ))
 
