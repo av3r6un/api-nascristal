@@ -28,16 +28,47 @@ def callback_url() -> str:
   return result
 
 
-def belongs_to_app(hook: dict, expected_url: str) -> bool:
+def belongs_to_app(hook: dict, expected_url: str, *, stock: bool = False) -> bool:
   actual, expected = urlsplit(hook.get('url', '')), urlsplit(expected_url)
   query = parse_qs(actual.query)
   # Same endpoint also recognises an old token parameter or a rotated secret.
   # A moved endpoint is recognised only with this installation's secret.
   same_endpoint = actual.netloc == expected.netloc and actual.path.rstrip('/') == expected.path
   same_secret = settings.MOYSKLAD_WEBHOOK_SECRET in query.get('secret', []) + query.get('token', [])
-  return (same_endpoint or (actual.path.rstrip('/') == expected.path and same_secret)) and (
+  matches_type = (hook.get('stockType') == 'stock' and hook.get('reportType') == 'all') if stock else (
     hook.get('entityType'), hook.get('action')
   ) in SUBSCRIPTIONS
+  return (same_endpoint or (actual.path.rstrip('/') == expected.path and same_secret)) and matches_type
+
+
+async def manage_stock_webhook(client: MoySkladClient, expected_url: str, operation: str) -> dict:
+  hooks = [hook async for hook in client.iter_entities('webhookstock')
+    if belongs_to_app(hook, expected_url, stock=True)]
+  created = updated = 0
+  if not hooks and operation in ('startup', 'connect'):
+    await client.create('webhookstock', dict(
+      url=expected_url, stockType='stock', reportType='all', enabled=True,
+    ))
+    created = 1
+  for hook in hooks:
+    changes = {}
+    if operation in ('startup', 'connect'):
+      changes['url'] = expected_url
+    if operation in ('connect', 'disconnect'):
+      changes['enabled'] = operation == 'connect'
+    changes = {key: value for key, value in changes.items() if hook.get(key) != value}
+    if changes:
+      await client.update('webhookstock', hook['id'], changes)
+      updated += 1
+  if operation != 'status':
+    hooks = [hook async for hook in client.iter_entities('webhookstock')
+      if belongs_to_app(hook, expected_url, stock=True)]
+  return dict(
+    entity_type='stock', action='UPDATE', registered=bool(hooks),
+    enabled=any(hook.get('enabled') is True for hook in hooks),
+    configured=any(hook.get('url') == expected_url for hook in hooks),
+    count=len(hooks), created=created, updated=updated,
+  )
 
 
 async def manage_webhooks(client: MoySkladClient, operation: str = 'status') -> dict:
@@ -79,8 +110,12 @@ async def manage_webhooks(client: MoySkladClient, operation: str = 'status') -> 
         and (action != 'UPDATE' or hook.get('diffType') == 'FIELDS') for hook in matches),
       count=len(matches),
     ))
+  stock = await manage_stock_webhook(client, expected_url, operation)
+  created += stock.pop('created')
+  updated += stock.pop('updated')
+  subscriptions.append(stock)
   return dict(
-    expected=len(SUBSCRIPTIONS), registered=sum(item['registered'] for item in subscriptions),
+    expected=len(subscriptions), registered=sum(item['registered'] for item in subscriptions),
     enabled=sum(item['enabled'] for item in subscriptions), created=created, updated=updated,
     subscriptions=subscriptions,
   )

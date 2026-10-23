@@ -30,3 +30,10 @@ class WebhookEvent(BaseModel):
 
 class MoyskladWebhook(BaseModel):
   events: list[WebhookEvent] = Field(min_length=1, max_length=1000)
+
+
+class MoyskladStockWebhook(BaseModel):
+  accountId: UUID
+  stockType: Literal['stock']
+  reportType: Literal['all']
+  reportUrl: str

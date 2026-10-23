@@ -14,6 +14,7 @@ from src.services.moysklad_import import MoySkladImportError, MoySkladImportServ
 
 logger = logging.getLogger('uvicorn.error')
 CATALOG_TYPES = ('product', 'variant')
+SYNC_TYPES = (*CATALOG_TYPES, 'stock')
 
 
 class MoySkladSyncService:
@@ -22,6 +23,9 @@ class MoySkladSyncService:
     self.client = client
 
   async def sync_entity(self, entity_type: str, entity_uuid: UUID):
+    if entity_type == 'stock':
+      await self.sync_stock()
+      return
     if entity_type not in CATALOG_TYPES:
       return
     try:
@@ -49,16 +53,32 @@ class MoySkladSyncService:
 
     if variants:
       stocks = await self.client.get('/report/stock/all/current',
-        stockType='quantity', include='zeroLines',
+        stockType='stock', include='zeroLines',
         filter='assortmentId=' + ','.join(row['id'] for row in variants),
       )
       if not isinstance(stocks, list):
         raise MoySkladImportError('Expected current variant stock report')
-      quantities = {row['assortmentId']: row['quantity'] for row in stocks}
+      quantities = {row['assortmentId']: row['stock'] for row in stocks}
       for variant in variants:
         # The full report omits positions that have never participated in operations.
         variant['quantity'] = quantities.get(variant['id'], 0)
     await MoySkladImportService(self.session).sync_product(product, variants, complete=entity_type == 'product')
+
+  async def sync_stock(self):
+    # A full short report also works after a queue delay longer than 24 hours.
+    stocks = await self.client.get('/report/stock/all/current', stockType='stock', include='zeroLines')
+    if not isinstance(stocks, list):
+      raise MoySkladImportError('Expected current stock report')
+    quantities = {UUID(row['assortmentId']): row['stock'] for row in stocks}
+    importer = MoySkladImportService(self.session)
+    quantities = {key: importer._quantity(value) for key, value in quantities.items()}
+    offers = (await self.session.execute(
+      select(Offer.id, ProductVariant.uuid).join(ProductVariant, ProductVariant.id == Offer.variant_id),
+    )).all()
+    if offers:
+      await self.session.execute(update(Offer), [
+        dict(id=offer.id, quantity=quantities.get(offer.uuid, 0)) for offer in offers
+      ])
 
   async def archive_entity(self, entity_type: str, entity_uuid: UUID):
     if entity_type == 'product':
@@ -75,7 +95,7 @@ class MoySkladSyncService:
 async def process_sync_tasks(sessions=session_maker):
   async with sessions() as session:
     query = select(SyncTask.id, SyncTask.entity_type, SyncTask.entity_uuid, SyncTask.status).where(
-      SyncTask.entity_type.in_(CATALOG_TYPES),
+      SyncTask.entity_type.in_(SYNC_TYPES),
     ).order_by(SyncTask.updated, SyncTask.id).limit(5)
     tasks = (await session.execute(query.where(SyncTask.status == 'pending'))).all()
     if not tasks:
@@ -116,7 +136,7 @@ async def run_moysklad_sync():
       if recovering:
         async with session_maker() as session:
           await session.execute(update(SyncTask).where(
-            SyncTask.status == 'processing', SyncTask.entity_type.in_(CATALOG_TYPES),
+            SyncTask.status == 'processing', SyncTask.entity_type.in_(SYNC_TYPES),
           ).values(status='pending'))
           await session.commit()
         recovering = False
