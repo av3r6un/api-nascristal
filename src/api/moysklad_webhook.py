@@ -3,17 +3,18 @@ import logging
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
-from pydantic import ValidationError
+from pydantic import TypeAdapter, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.config import settings
 from src.core.database import get_db
-from src.schemas.moysklad_webhook import MoyskladWebhook
-from src.services.moysklad_webhook import save_webhook_events
+from src.schemas.moysklad_webhook import MoyskladWebhook, MoyskladStockWebhook
+from src.services.moysklad_webhook import save_webhook_events, save_stock_webhook
 
 
 router = APIRouter(tags=['moysklad'])
 logger = logging.getLogger('uvicorn.error')
+webhook_payload = TypeAdapter(MoyskladWebhook | MoyskladStockWebhook)
 
 
 @router.post('/webhooks/moysklad', status_code=204)
@@ -45,16 +46,21 @@ async def moysklad_webhook(
     if len(body) > 1024 * 1024:
       raise HTTPException(413, 'Webhook body is too large')
   try:
-    payload = MoyskladWebhook.model_validate_json(body)
+    payload = webhook_payload.validate_json(body)
   except ValidationError:
     raise HTTPException(422, 'Invalid MoySklad webhook payload')
-  if any(event.accountId != account_id for event in payload.events):
+  accounts = [payload.accountId] if isinstance(payload, MoyskladStockWebhook) else [event.accountId for event in payload.events]
+  if any(value != account_id for value in accounts):
     logger.warning('MoySklad webhook rejected: reason=account_mismatch request_id=%s', request_id)
     raise HTTPException(403, 'Unexpected MoySklad account')
 
   async with session.begin():
-    await save_webhook_events(session, payload.events, request_id)
+    if isinstance(payload, MoyskladStockWebhook):
+      await save_stock_webhook(session, payload, request_id)
+    else:
+      await save_webhook_events(session, payload.events, request_id)
   logger.info(
-    'MoySklad webhook accepted: request_id=%s events=%d', request_id, len(payload.events),
+    'MoySklad webhook accepted: request_id=%s events=%d', request_id,
+    1 if isinstance(payload, MoyskladStockWebhook) else len(payload.events),
   )
   return Response(status_code=204)
