@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 from urllib.parse import parse_qsl, urlsplit
 
@@ -17,6 +18,19 @@ from src.services.moysklad_import import MoySkladImportError, MoySkladImportServ
 logger = logging.getLogger('uvicorn.error')
 CATALOG_TYPES = ('product', 'variant')
 SYNC_TYPES = (*CATALOG_TYPES, 'stock')
+MOSCOW = timezone(timedelta(hours=3))
+
+
+def stock_report_expired(payload: dict) -> bool:
+  try:
+    changed_since = dict(parse_qsl(urlsplit(payload['reportUrl']).query))['changedSince']
+    moment = datetime.fromisoformat(changed_since)
+  except (KeyError, TypeError, ValueError):
+    return False
+  # MoySklad timestamps without an offset use Moscow time.
+  if moment.tzinfo is None:
+    moment = moment.replace(tzinfo=MOSCOW)
+  return datetime.now(timezone.utc) - moment > timedelta(hours=24)
 
 
 class MoySkladSyncService:
@@ -63,26 +77,31 @@ class MoySkladSyncService:
         variant['quantity'] = quantities.get(variant['id'], 0)
     await MoySkladImportService(self.session).sync_product(product, variants, complete=entity_type == 'product')
 
-  async def sync_stock(self, payload: dict):
-    webhook = MoyskladStockWebhook.model_validate(payload)
-    url = urlsplit(webhook.reportUrl)
-    params = dict(parse_qsl(url.query))
-    params.update(stockType='stock', include='zeroLines')
+  async def sync_stock(self, payload: dict | None = None):
+    params = dict(stockType='stock')
+    if payload is None:
+      params['include'] = 'zeroLines'
+    else:
+      webhook = MoyskladStockWebhook.model_validate(payload)
+      if stock_report_expired(payload):
+        raise MoySkladImportError('Stock report interval exceeds 24 hours')
+      url = urlsplit(webhook.reportUrl)
+      params['changedSince'] = dict(parse_qsl(url.query))['changedSince']
     stocks = await self.client.get('/report/stock/all/current', **params)
     if not isinstance(stocks, list):
       raise MoySkladImportError('Expected current stock report')
     quantities = {UUID(row['assortmentId']): row['stock'] for row in stocks}
     importer = MoySkladImportService(self.session)
     quantities = {key: importer._quantity(value) for key, value in quantities.items()}
-    if not quantities:
+    if not quantities and payload is not None:
       return
-    offers = (await self.session.execute(
-      select(Offer.id, ProductVariant.uuid).join(ProductVariant, ProductVariant.id == Offer.variant_id)
-      .where(ProductVariant.uuid.in_(quantities)),
-    )).all()
+    query = select(Offer.id, ProductVariant.uuid).join(ProductVariant, ProductVariant.id == Offer.variant_id)
+    if payload is not None:
+      query = query.where(ProductVariant.uuid.in_(quantities))
+    offers = (await self.session.execute(query)).all()
     if offers:
       await self.session.execute(update(Offer), [
-        dict(id=offer.id, quantity=quantities[offer.uuid]) for offer in offers
+        dict(id=offer.id, quantity=quantities.get(offer.uuid, 0)) for offer in offers
       ])
 
   async def archive_entity(self, entity_type: str, entity_uuid: UUID):
@@ -97,14 +116,30 @@ class MoySkladSyncService:
     await self.session.execute(update(ProductVariant).where(condition).values(archived=True))
 
 
+async def select_sync_tasks(session, status: str):
+  query = select(SyncTask.id, SyncTask.entity_type, SyncTask.entity_uuid, SyncTask.status, SyncTask.payload, SyncTask.request_id).where(
+    SyncTask.entity_type.in_(SYNC_TYPES), SyncTask.status == status,
+  ).order_by(SyncTask.updated, SyncTask.id)
+  tasks = []
+  for task in (await session.execute(query)).all():
+    if task.entity_type == 'stock' and stock_report_expired(task.payload):
+      if status == 'pending':
+        await session.execute(update(SyncTask).where(
+          SyncTask.id == task.id, SyncTask.status == status, SyncTask.request_id == task.request_id,
+        ).values(status='failed'))
+      continue
+    tasks.append(task)
+    if len(tasks) == 5:
+      break
+  return tasks
+
+
 async def process_sync_tasks(sessions=session_maker):
   async with sessions() as session:
-    query = select(SyncTask.id, SyncTask.entity_type, SyncTask.entity_uuid, SyncTask.status, SyncTask.payload).where(
-      SyncTask.entity_type.in_(SYNC_TYPES),
-    ).order_by(SyncTask.updated, SyncTask.id).limit(5)
-    tasks = (await session.execute(query.where(SyncTask.status == 'pending'))).all()
+    tasks = await select_sync_tasks(session, 'pending')
     if not tasks:
-      tasks = (await session.execute(query.where(SyncTask.status == 'failed'))).all()
+      tasks = await select_sync_tasks(session, 'failed')
+    await session.commit()
   if not tasks:
     return
   async with MoySkladClient() as client:
@@ -138,7 +173,17 @@ async def process_sync_tasks(sessions=session_maker):
           task.entity_uuid, type(exc).__name__, detail)
 
 
+async def reconcile_stock(sessions=session_maker):
+  async with MoySkladClient() as client, sessions() as session:
+    await MoySkladSyncService(session, client).sync_stock()
+    await session.commit()
+
+
 async def run_moysklad_sync():
+  now = datetime.now(MOSCOW)
+  next_reconciliation = now.replace(hour=5, minute=0, second=0, microsecond=0)
+  if now > next_reconciliation:
+    next_reconciliation += timedelta(days=1)
   recovering = True
   while True:
     try:
@@ -149,6 +194,14 @@ async def run_moysklad_sync():
           ).values(status='pending'))
           await session.commit()
         recovering = False
+      now = datetime.now(MOSCOW)
+      if now >= next_reconciliation:
+        next_reconciliation = now.replace(hour=5, minute=0, second=0, microsecond=0) + timedelta(days=1)
+        try:
+          await reconcile_stock()
+        except Exception as exc:
+          logger.warning('MoySklad stock reconciliation failed: error=%s detail=%s',
+            type(exc).__name__, getattr(exc, 'orig', exc))
       await process_sync_tasks()
     except Exception as exc:
       recovering = True
