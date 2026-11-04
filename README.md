@@ -1,113 +1,73 @@
-# nascrystal API
+# NAS Crystal API
 
-FastAPI backend for the nascrystal storefront and management panel.
+FastAPI-бэкенд витрины и панели NAS Crystal. Использует асинхронный SQLAlchemy, Alembic, SQLite в DEV и MySQL в production.
 
-## Stack and architecture
+МойСклад поставляет ассортимент, варианты, цены и остатки. Витрина читает локальную проекцию каталога с фильтрацией и пагинацией на бэкенде. Заказы и платежи хранятся локально, оплату обрабатывает ЮKassa. Метаданные изображений хранятся в БД, файлы — в S3 и выдаются через CDN.
 
-- FastAPI with async SQLAlchemy
-- Alembic migrations
-- SQLite for local development, MySQL for production
-- MoySklad as the source of products, variants, sale prices and available stock
-- Local database as the storefront catalog projection
-- Local purchases and payments with YooKassa integration
-- Product image metadata in the database; image objects in S3 and delivery through CDN
+## Локальный запуск
 
-The storefront never calls MoySklad directly. Catalog data is imported into the
-local `Product`, `ProductVariant`, `Offer`, `Attribute` and `ProductImage` models.
-Categories are managed locally.
-
-## Setup and run
-
-Python 3.14+ and [uv](https://docs.astral.sh/uv/) are required.
-
-```bash
-uv sync --group dev
-uv run uvicorn src.main:app --reload
-```
-
-- API: `http://127.0.0.1:8000`
-- OpenAPI: `http://127.0.0.1:8000/docs`
-- Health check: `GET /health`
-
-Configuration is read from `src/.env`. Important variables:
+Нужны Python 3.14+ и [uv](https://docs.astral.sh/uv/). Настройки загружаются из `src/.env`. Минимальный пример для DEV:
 
 ```dotenv
 STAGE=DEV
-DB_URL=sqlite+aiosqlite:///./dev.db
 DB_USER=
 DB_PASS=
-DB_HOST=
+DB_HOST=localhost
 DB_PORT=3306
-DB_NAME=
+DB_NAME=nascrystal
 SECRET_KEY=
-YOOKASSA_SHOP_ID=
-YOOKASSA_SECRET_KEY=
-YOOKASSA_RETURN_URL=
+S3_DOMAIN=
+S3_BUCKET=
+S3_ACCESS_KEY=
+S3_SECRET_KEY=
+MOYSKLAD_CHECKOUT_SYNC_ENABLED=false
 ```
 
-`DB_URL` has priority over the stage-specific connection. Without it, `DEV`
-uses SQLite and `PROD` builds a MySQL URL from `DB_USER`, `DB_PASS`, `DB_HOST`,
-`DB_PORT` and `DB_NAME`.
-
-## Database
+В `DEV` используется `./dev.db`. В `PROD` адрес MySQL собирается из `DB_*`. Явный `DB_URL` имеет приоритет. Для оплаты задайте `YOOKASSA_SHOP_ID`, `YOOKASSA_SECRET_KEY` и `YOOKASSA_RETURN_URL`. Для импорта МойСклада нужен `MOYSKLAD_TOKEN`. Отправкой заказов при оформлении управляет отдельный флаг `MOYSKLAD_CHECKOUT_SYNC_ENABLED`.
 
 ```bash
-# Apply migrations
+uv sync --group dev
 uv run alembic upgrade head
-
-# Generate a forward migration
-uv run alembic revision --autogenerate -m "your message"
+uv run uvicorn src.main:app --reload
 ```
 
-Existing migration files are immutable; schema changes are added as new forward
-migrations.
+API доступно на `http://127.0.0.1:8000`, документация — по `/docs`, проверка доступности — `GET /health`. Миграции добавляются отдельными ревизиями. Текущая головная ревизия — `6c28d90ea413`.
 
-## API contracts
+## API и доступ
 
-Pydantic contracts live in `src/schemas/`; generated OpenAPI is the canonical
-HTTP reference. Main endpoint groups:
+Контракты находятся в [src/schemas](src/schemas), актуальные маршруты описаны в OpenAPI.
 
-- `/auth/*` — registration, login and token refresh
-- `/api/moysklad/import` — manual MoySklad assortment import
-- `/api/payments` — payments
-- `/api/static`, `/api/i18n`, `/api/settings` — storefront content and settings
-- `/api/feedback`, `/api/logs` — operations and diagnostics
-- `/webhooks/yookassa` — YooKassa notifications
+| Маршрут | Назначение |
+| --- | --- |
+| `/auth/*` | Регистрация, вход и обновление токена |
+| `/api/stock/*`, `/api/products/*` | Каталог, фильтры и управление товарами |
+| `/api/purchases/*`, `/api/payments/*` | Заказы и платежи |
+| `/api/delivery/*`, `/api/integrations/*` | Расчёт доставки, виджет и настройки модулей |
+| `/api/static/*`, `/api/i18n/*`, `/api/settings/*` | Контент, локали и настройки сайта |
+| `/webhooks/yookassa`, `/webhooks/moysklad`, `/webhooks/cdek` | Уведомления провайдеров |
 
-All `/api/*` routes require `Authorization: Bearer <access-token>`. Successful
-JSON responses with status 200 use the common envelope:
+Маршруты `/api/*` требуют Bearer-токен. Витрина работает через сервисную учётную запись Nitro, маршруты панели для просмотра и изменения заказов требуют роль сотрудника, настройки интеграций — роль администратора. Успешные JSON-ответы со статусом 200 возвращаются в обёртке `{"status":"success","body":...}`. Подробности ошибок зависят от обработчика и схемы в OpenAPI.
 
-```json
-{"status": "success", "body": {}}
-```
+## СДЭК
 
-Errors use:
+- Настройки и ключи хранятся в `integration_configs`. Модуль включается из панели. `DEV` использует `api.edu.cdek.ru`, `PROD` — `api.cdek.ru`.
+- Корзина сохраняет способ и место доставки в `purchases.delivery`. Отправление и состояние запросов СДЭК хранятся в `delivery_shipments`.
+- После оплаты заказ переходит в сборку. При сохранении готовой посылки бэкенд проверяет адрес или ПВЗ, рассчитывает тариф по фактической упаковке и регистрирует отправление. Стоимость товаров берётся из сохранённых строк чека успешного платежа. Для предоплаченных товаров `payment.value` равен нулю, сумма доставки передаётся отдельно.
+- Бэкенд сверяет регистрацию, подтверждение изменений, стоимость и получателя с ответами СДЭК. Если идентификатор упаковки ещё не выдан, изменение упаковки можно сохранить локально и повторно отправить после регистрации.
+- Квитанция и ШК запрашиваются после успешной регистрации и появления номера накладной. PDF доступен после `READY`. Изменение накладной сбрасывает прежние задания печати.
+- Фоновая сверка выполняется с интервалом `CDEK_SYNC_INTERVAL` (по умолчанию 300 секунд). Вебхуки СДЭК выключены по умолчанию.
 
-```json
-{"status": "error", "message": "..."}
-```
+Маршруты панели и формат запросов подробнее описаны в [docs/cdek.md](docs/cdek.md). В репозитории есть [локальная спецификация СДЭК](docs/openapi_api_v2_integration.json).
 
-## MoySklad catalog import
-
-`src/services/moysklad_import.py` provides composable async functions for:
-
-- idempotent product and variant upserts;
-- characteristics, sale price and available-stock synchronization;
-- local category assignment;
-- S3 object-key and primary-image metadata handling;
-- explicit full-import archiving when it is safe to enable.
-
-The service does not commit transactions itself. Callers should wrap a complete
-import in `async with session.begin()` and keep `archive_missing=False` until
-legacy catalog rows are mapped and verified.
-
-## Tests and Docker
+## Проверки и выпуск
 
 ```bash
-uv run python -m pytest -q
+uv run python -m pytest tests/test_cdek.py -q
 docker compose up --build -d
-docker compose down
 ```
 
-Action logs are written to `logs/actions.log`; sensitive request fields are
-redacted.
+Проверки СДЭК используют изолированную SQLite и подменённый внешний API. Docker запускает `alembic upgrade head` перед стартом Uvicorn. Compose передаёт настройки из `src/.env` и монтирует каталог `logs/`. Действия API записываются в `logs/actions.log` с маскированием настроенных чувствительных полей.
+
+[Workflow публикации образа](.github/workflows/dockerhub-deploy.yml) использует `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN` и необязательный `DOCKERHUB_REPOSITORY`.
+
+Фронтенд и бэкенд выпускаются вместе из-за авторизации маршрутов панели. Перед включением СДЭК для покупателей предстоит проверить миграции на копии production MySQL и пройти заказ на боевом СДЭК до подтверждения изменений и получения обоих PDF.
