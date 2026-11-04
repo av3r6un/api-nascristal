@@ -15,6 +15,7 @@ from src.models import AttributeOption, Offer, Payment, ProductAttribute, Produc
 Product = ProductVariant
 PropertyOption = AttributeOption
 from src.models.payment import PaymentStatus as ProviderPaymentStatus
+from src.models.delivery import DeliveryShipment
 from src.schemas.contact import normalize_contact_info
 from src.schemas.purchase import (
   PurchaseCreateRequest,
@@ -25,6 +26,9 @@ from src.schemas.purchase import (
 )
 from src.services.purchase_sync import build_order_payload, lock_purchase, sync_purchase, sync_purchase_status
 from src.services.payment_sync import apply_successful_payment, refresh_payment_state
+from src.services import cdek
+from src.services.integrations import delivery_selection
+from src.api.delivery import staff
 from src.services.yookassa import (
   build_purchase_return_url,
   build_yookassa_payment_payload,
@@ -277,6 +281,7 @@ def _serialize_purchase_tracking(payment: Payment | None, purchase: Purchase) ->
       "price": purchase.final_price,
       "status": purchase.status.value,
       "contact_info": contact_info,
+      "delivery": purchase.delivery,
     },
     "payment": (
       {
@@ -372,6 +377,7 @@ def _serialize_purchase(
       if (product := products_by_id.get(product_id)) is not None
     ],
     "contact_info": contact_info,
+    "delivery": purchase.delivery,
     "payment": _serialize_payment(payment),
     "status": purchase.status.value,
     "created_ts": purchase.created_ts,
@@ -383,7 +389,18 @@ async def _serialize_purchase_with_refs(session: AsyncSession, purchase: Purchas
   products_by_id = await _load_product_map(session, purchase.product_ids)
   options_by_eid = await _load_property_option_map(session, _collect_property_eids(purchase.properties))
   payments_by_id = await _load_payment_map(session, [purchase.payment_id])
-  return _serialize_purchase(purchase, products_by_id, options_by_eid, payments_by_id)
+  result = _serialize_purchase(purchase, products_by_id, options_by_eid, payments_by_id)
+  shipment = await session.scalar(select(DeliveryShipment).where(DeliveryShipment.purchase_id == purchase.id))
+  result['delivery_editable'] = cdek.can_edit(shipment)
+  result['delivery_update_status'] = 'draft' if cdek.has_delivery_draft(purchase) else (
+    (shipment.editing or {}).get('state') if shipment else None)
+  result['delivery_status'] = {key: getattr(shipment, key) for key in (
+    'status', 'tracking_number', 'registration', 'editing', 'cancellation')} if shipment else None
+  if result['delivery_status']:
+    result['delivery_status']['editing'] = {key: value for key, value in shipment.editing.items()
+      if key in ('state', 'errors')}
+  result['delivery_can_dispatch'] = cdek.can_dispatch(purchase, shipment)
+  return result
 
 
 async def _get_purchase_or_404(session: AsyncSession, purchase_id: int) -> Purchase:
@@ -486,7 +503,7 @@ async def _create_card_payment_for_purchase(
   )
   payment.description = payment_payload["description"]
   payment.payment_metadata = payment_payload["metadata"]
-  payment.request_payload = payment_payload
+  payment.request_payload = {**payment_payload, "receipt_item_variant_ids": list(quantities_by_product)}
 
   try:
     provider_payment = await create_yookassa_payment(
@@ -570,6 +587,7 @@ async def create_purchase(
     product_quantities=_normalize_quantities_by_product(quantities_by_product),
     quantity=sum(item.quantity.value for item in payload.items),
     contact_info=contact_info,
+    delivery=await delivery_selection(session, payload.delivery),
     final_price=payload.price,
     purchase_uuid=str(idempotency_key) if idempotency_key else None,
   )
@@ -599,7 +617,7 @@ async def create_purchase(
   return await _serialize_purchase_with_refs(session, purchase)
 
 
-@router.get("/", response_model=PurchasesResponse, status_code=200)
+@router.get("/", response_model=PurchasesResponse, status_code=200, dependencies=[Depends(staff)])
 async def get_purchases(session: AsyncSession = Depends(get_db)) -> dict[str, list[dict]]:
   result = await session.execute(
     select(Purchase)
@@ -661,19 +679,24 @@ async def create_purchase_payment_by_uuid(purchase_uuid: str, session: AsyncSess
   return _serialize_purchase_tracking(payment, purchase)
 
 
-@router.get("/{purchase_id}", response_model=PurchaseResponse, status_code=200)
+@router.get("/{purchase_id}", response_model=PurchaseResponse, status_code=200, dependencies=[Depends(staff)])
 async def get_purchase(purchase_id: int, session: AsyncSession = Depends(get_db)) -> dict:
   purchase = await _get_purchase_or_404(session, purchase_id)
   return await _serialize_purchase_with_refs(session, purchase)
 
 
-@router.patch("/{purchase_id}", response_model=PurchaseResponse, status_code=200)
+@router.patch("/{purchase_id}", response_model=PurchaseResponse, status_code=200, dependencies=[Depends(staff)])
 async def update_purchase(
   purchase_id: int,
   payload: PurchaseUpdateRequest,
   session: AsyncSession = Depends(get_db),
 ) -> dict:
   purchase = await lock_purchase(session, purchase_id)
+  if 'delivery' in payload.model_fields_set:
+    if payload.model_fields_set != {'delivery'}:
+      raise JSRError('bad_request', message='Update delivery separately from payment or product details')
+    purchase = await cdek.save_purchase_delivery(session, purchase_id, payload.delivery)
+    return await _serialize_purchase_with_refs(session, purchase)
   if payload.products is not None:
     offer_ids = [item.id for item in payload.products]
     products_by_offer_id = await _get_products_by_offer_ids_or_404(session, offer_ids)
@@ -754,9 +777,19 @@ async def update_purchase(
   return await _serialize_purchase_with_refs(session, purchase)
 
 
-@router.put("/{purchase_id}", response_model=PurchaseResponse, status_code=200)
+@router.put("/{purchase_id}", response_model=PurchaseResponse, status_code=200, dependencies=[Depends(staff)])
 async def mark_purchase_delivering(purchase_id: int, session: AsyncSession = Depends(get_db)) -> dict:
   purchase = await lock_purchase(session, purchase_id)
+  if (purchase.delivery or {}).get('module') == 'cdek':
+    shipment = await session.scalar(select(DeliveryShipment).where(DeliveryShipment.purchase_id == purchase_id))
+    if shipment is None:
+      raise JSRError('conflict', message='Сначала соберите заказ и зарегистрируйте отправление в СДЭК')
+    shipment = await cdek.refresh_shipment(session, purchase_id, commit=False)
+    if purchase.status != PurchaseStatus.DELIVERING and not cdek.can_dispatch(purchase, shipment):
+      raise JSRError('conflict', message='СДЭК должен подтвердить регистрацию и изменения собранного заказа')
+    payment = await session.get(Payment, purchase.payment_id) if purchase.payment_id else None
+    if not payment or not payment.paid or payment.status != 'succeeded':
+      raise JSRError('conflict', message='Сначала оплатите заказ')
   purchase.status = PurchaseStatus.DELIVERING
   # mailing here
   await sync_purchase_status(session, purchase)
@@ -765,9 +798,14 @@ async def mark_purchase_delivering(purchase_id: int, session: AsyncSession = Dep
   return await _serialize_purchase_with_refs(session, purchase)
 
 
-@router.post("/{purchase_id}", response_model=PurchaseResponse, status_code=200)
+@router.post("/{purchase_id}", response_model=PurchaseResponse, status_code=200, dependencies=[Depends(staff)])
 async def finish_purchase(purchase_id: int, session: AsyncSession = Depends(get_db)) -> dict:
   purchase = await lock_purchase(session, purchase_id)
+  shipment = (await session.execute(select(DeliveryShipment).where(
+    DeliveryShipment.purchase_id == purchase_id))).scalar_one_or_none()
+  if ((purchase.delivery or {}).get('module') == 'cdek' or shipment is not None) and (
+    shipment is None or shipment.status != 'DELIVERED'):
+    raise JSRError('conflict', message='CDEK must confirm delivery before finishing this purchase')
   purchase.status = PurchaseStatus.FINISHED
   # mailing here
   await sync_purchase_status(session, purchase)
@@ -776,7 +814,7 @@ async def finish_purchase(purchase_id: int, session: AsyncSession = Depends(get_
   return await _serialize_purchase_with_refs(session, purchase)
 
 
-@router.post("/{purchase_id}/sync", response_model=PurchaseResponse, status_code=200)
+@router.post("/{purchase_id}/sync", response_model=PurchaseResponse, status_code=200, dependencies=[Depends(staff)])
 async def retry_purchase_sync(purchase_id: int, session: AsyncSession = Depends(get_db)) -> dict:
   purchase = await lock_purchase(session, purchase_id)
   products_by_id = await _load_product_map(session, purchase.product_ids)

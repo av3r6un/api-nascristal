@@ -2,7 +2,7 @@ from typing import Any
 
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import raiseload, selectinload
 
 from src.core.config import settings
 from src.core.change_logging import record_change
@@ -130,6 +130,7 @@ class ProductService:
       select(Product)
       .where(*conditions)
       .options(
+        raiseload("*"),
         selectinload(Product.category),
         selectinload(Product.variants)
           .selectinload(ProductVariant.attributes)
@@ -242,6 +243,7 @@ class ProductService:
       .offset(page * limit)
       .limit(limit + 1)
       .options(
+        raiseload("*"),
         selectinload(Product.category),
         selectinload(Product.variants.and_(variant_condition))
           .selectinload(ProductVariant.attributes)
@@ -348,13 +350,13 @@ class ProductService:
       if filter_name == "fixation"
       else AttributeOption.value.in_(values)
     )
-    return ProductVariant.attributes.any(
-      ProductAttribute.option.has(
-        and_(
-          AttributeOption.attribute.has(Attribute.name == attribute_name),
-          value_condition,
-        )
-      )
+    # An indexed set of variant IDs avoids three nested correlated EXISTS
+    # for every candidate variant and every facet query.
+    return ProductVariant.id.in_(
+      select(ProductAttribute.variant_id)
+      .join(AttributeOption, AttributeOption.id == ProductAttribute.option_id)
+      .join(Attribute, Attribute.id == AttributeOption.attribute_id)
+      .where(Attribute.name == attribute_name, value_condition)
     )
 
   def _stock_variant_condition(
@@ -374,9 +376,17 @@ class ProductService:
     return and_(*conditions)
   
   async def _get_attrs(self, **filters) -> dict[str, Any]:
-    attributes = await Attribute.get_json(self.session, **filters)
-    categories = await Category.get_json(self.session, **filters)
-    return dict(attributes=attributes, categories=categories)
+    # Metadata must never traverse categories -> products or options -> variants.
+    attributes = (await self.session.scalars(
+      select(Attribute).options(raiseload("*"), selectinload(Attribute.options))
+    )).all()
+    categories = (await self.session.scalars(
+      select(Category).options(raiseload("*"))
+    )).all()
+    return dict(
+      attributes=[attribute.json for attribute in attributes],
+      categories=[category.json for category in categories],
+    )
 
   def _response(
     self,

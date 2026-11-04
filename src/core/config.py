@@ -42,6 +42,7 @@ class Settings(BaseSettings):
   MOYSKLAD_SALES_CHANNEL_ID: str | None = None
   MOYSKLAD_ORDER_STATES: dict[str, str] = {}
   DEV_PURCHASE_DELETE_ENABLED: bool = False
+  CDEK_SYNC_INTERVAL: PositiveInt = 300
 
   model_config = SettingsConfigDict(
     # src/core/config.py -> src/.env
