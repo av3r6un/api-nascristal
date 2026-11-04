@@ -144,7 +144,8 @@ async def sync_purchase(session: AsyncSession, purchase: Purchase, products_by_i
     raise JSRError(status=502, message=f'MoySklad synchronization failed for purchase {purchase.id}; retry the same purchase') from exc
 
 
-async def sync_purchase_status(session: AsyncSession, purchase: Purchase, *, paid: bool = False) -> None:
+async def sync_purchase_status(session: AsyncSession, purchase: Purchase, *, paid: bool = False,
+  delivery_tracking_number: str | None = None) -> None:
   """Update only integration status lines and an explicitly mapped native state."""
   if not settings.MOYSKLAD_CHECKOUT_SYNC_ENABLED:
     return
@@ -165,6 +166,8 @@ async def sync_purchase_status(session: AsyncSession, purchase: Purchase, *, pai
       verify_order(order, purchase, submission)
       lines = (order.get('description') or '').splitlines()
       changes = {'Статус сайта:': purchase.status.value}
+      if delivery_tracking_number:
+        changes['Накладная СДЭК:'] = delivery_tracking_number
       if paid:
         changes['Оплата YooKassa:'] = 'succeeded'
       for prefix, value in changes.items():

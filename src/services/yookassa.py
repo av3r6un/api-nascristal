@@ -131,3 +131,24 @@ async def get_yookassa_payment(external_payment_id: str) -> dict[str, Any]:
     raise JSRError(status=502, message=description or "YooKassa payment fetch failed")
 
   return response_payload
+
+
+async def get_yookassa_receipt(external_payment_id: str) -> dict:
+  if not settings.YOOKASSA_SHOP_ID or not settings.YOOKASSA_SECRET_KEY:
+    raise JSRError(status=409, message="YooKassa credentials are required to recover the receipt")
+  try:
+    async with httpx.AsyncClient(
+      base_url=settings.YOOKASSA_API_URL,
+      auth=(settings.YOOKASSA_SHOP_ID, settings.YOOKASSA_SECRET_KEY),
+      timeout=30.0,
+    ) as client:
+      response = await client.get("/receipts", params={"payment_id": external_payment_id, "limit": 100})
+    response.raise_for_status()
+    data = response.json()
+  except (httpx.HTTPError, ValueError) as exc:
+    raise JSRError(status=502, message="Could not recover the paid receipt from YooKassa") from exc
+  receipts = [r for r in data.get("items", []) if r.get("type") == "payment"
+    and r.get("status") == "succeeded" and r.get("payment_id") == external_payment_id]
+  if data.get("next_cursor") or len(receipts) != 1:
+    raise JSRError(status=409, message="A unique successful payment receipt is required")
+  return receipts[0]

@@ -52,7 +52,7 @@ class ProductVariant(Base):
   @property
   def json(self):
     return dict(
-      id=self.id, uuid=self.uuid, product_id=self.product.id, name=self.name,
+      id=self.id, uuid=self.uuid, product_id=self.product_id, name=self.name,
       archived=self.archived, sku=self.sku, attributes=[a.json for a in self.attributes],
       offer=self.offer.json
     )

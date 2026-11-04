@@ -9,7 +9,7 @@ from src.services.yookassa import get_yookassa_payment
 async def apply_successful_payment(
   session: AsyncSession, payment: Payment, purchase: Purchase | None = None,
 ) -> None:
-  if payment.status != ProviderPaymentStatus.SUCCEEDED.value:
+  if payment.status != ProviderPaymentStatus.SUCCEEDED.value or not payment.paid:
     return
   if purchase is None:
     purchase = await Purchase.first(session, payment_id=payment.id)
@@ -18,8 +18,8 @@ async def apply_successful_payment(
   purchase = await lock_purchase(session, purchase.id)
   if purchase.payment_id != payment.id:
     return  # A superseded payment must not update the current order.
-  if purchase.status != PurchaseStatus.FINISHED:
-    purchase.status = PurchaseStatus.DELIVERING
+  if purchase.status in (PurchaseStatus.CREATED, PurchaseStatus.AWAITING_PAYMENT, PurchaseStatus.PROCESSING):
+    purchase.status = PurchaseStatus.ASSEMBLING
   # A provider failure must never roll back the already confirmed payment.
   await session.commit()
   purchase = await lock_purchase(session, purchase.id)

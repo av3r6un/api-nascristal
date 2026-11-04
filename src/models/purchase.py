@@ -12,6 +12,7 @@ class PurchaseStatus(enum.Enum):
   CREATED = "created"
   AWAITING_PAYMENT = "awaiting_payment"
   PROCESSING = "processing"
+  ASSEMBLING = "assembling"
   DELIVERING = "delivering"
   FINISHED = "finished"
 
@@ -25,6 +26,7 @@ class Purchase(Base):
   product_quantities: Mapped[dict[str, int]] = mapped_column(JSON, nullable=False, default=dict)
   quantity: Mapped[int] = mapped_column(Integer, nullable=False)
   contact_info: Mapped[dict] = mapped_column(JSON, nullable=False)
+  delivery: Mapped[dict | None] = mapped_column(JSON, nullable=True)
   final_price: Mapped[int] = mapped_column(Integer, nullable=False)
   status: Mapped[PurchaseStatus] = mapped_column(
     Enum(PurchaseStatus),
@@ -45,6 +47,7 @@ class Purchase(Base):
     payment_id: int | None = None,
     purchase_uuid: str | None = None,
     status: PurchaseStatus | str = PurchaseStatus.CREATED,
+    delivery: dict | None = None,
     **kwargs,
   ) -> None:
     self.uuid = purchase_uuid or str(uuid.uuid4())
@@ -54,6 +57,7 @@ class Purchase(Base):
     self.product_quantities = product_quantities
     self.quantity = quantity
     self.contact_info = contact_info
+    self.delivery = delivery
     self.final_price = final_price
     self.status = self._coerce_status(status)
 
@@ -68,7 +72,7 @@ class Purchase(Base):
     return dict(
       id=self.id, uuid=self.uuid, payment_id=self.payment_id, product_ids=self.product_ids,
       properties=self.properties, product_quantities=self.product_quantities,
-      quantity=self.quantity, contact_info=self.contact_info, final_price=self.final_price,
+      quantity=self.quantity, contact_info=self.contact_info, delivery=self.delivery, final_price=self.final_price,
       status=self.status.value, created_ts=self.created_ts, updated_ts=self.updated_ts
     )
 

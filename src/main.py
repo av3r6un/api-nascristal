@@ -22,13 +22,17 @@ from src.utils.auth import extract_bearer_token, user_from_token
 from src.api import routers
 from src.exceptions.base import BaseError
 from src.services import ServerSettings
+from src.services.cdek import run_cdek_sync
+from src.services.cdek_client import CdekError
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
   async with session_maker() as session:
     await ServerSettings.load(session)
   logger = logging.getLogger('uvicorn.error')
-  if settings.MOYSKLAD_TOKEN and settings.MOYSKLAD_WEBHOOK_URL:
+  if settings.STAGE == 'DEV':
+    logger.info('MoySklad webhook registration skipped: DEV environment')
+  elif settings.MOYSKLAD_TOKEN and settings.MOYSKLAD_WEBHOOK_URL:
     try:
       async with registration_lock, MoySkladClient(timeout=5.0) as client:
         result = await manage_webhooks(client, 'startup')
@@ -39,9 +43,13 @@ async def lifespan(app: FastAPI):
   else:
     logger.warning('MoySklad webhook registration skipped: token or webhook URL not configured')
   sync_task = asyncio.create_task(run_moysklad_sync()) if settings.MOYSKLAD_TOKEN else None
+  cdek_sync_task = asyncio.create_task(run_cdek_sync())
   try:
     yield
   finally:
+    cdek_sync_task.cancel()
+    with suppress(asyncio.CancelledError):
+      await cdek_sync_task
     if sync_task:
       sync_task.cancel()
       with suppress(asyncio.CancelledError):
@@ -57,6 +65,9 @@ logging.getLogger('uvicorn.access').addFilter(WebhookAccessFilter())
 BODY_LOG_PREVIEW_LIMIT = 500
 BODY_LOG_CAPTURE_LIMIT = 64 * 1024
 SENSITIVE_BODY_KEYS = {
+  "config",
+  "recipient",
+  "sender",
   "authorization",
   "password",
   "token",
@@ -298,6 +309,12 @@ async def actions_logging_middleware(request: Request, call_next):
 @app.exception_handler(BaseError)
 async def base_error_handler(request: Request, exc: BaseError):
   return JSONResponse(status_code=exc.status, content=exc.json)
+
+
+@app.exception_handler(CdekError)
+async def cdek_error_handler(request: Request, exc: CdekError):
+  return JSONResponse(status_code=502, content={'status': 'error', 'message': str(exc),
+    'ambiguous': exc.ambiguous, 'errors': exc.errors})
 
 
 @app.exception_handler(StarletteHTTPException)

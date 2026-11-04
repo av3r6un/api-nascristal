@@ -14,8 +14,10 @@ from .settings import router as settings_router
 from .yookassa import router as yookassa_router
 from .stock import router as stock_router
 from .catalog import router as catalog_router
+from .delivery import router as delivery_router
 
 routers = (
+  delivery_router,
   auth_router,
   categories_router,
   changes_router,

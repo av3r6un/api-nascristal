@@ -7,6 +7,7 @@ from .static import StaticPage, StaticPagesTranslation
 from .settings import Setting
 from .change_event import ChangeEvent
 from .sync import SyncTask, SyncAttempt
+from .delivery import IntegrationConfig, DeliveryShipment
 from .products import (
   Attribute,
   AttributeOption,

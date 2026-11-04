@@ -2,6 +2,7 @@ from pydantic import BaseModel, Field
 
 from src.models.purchase import PurchaseStatus
 from src.schemas.contact import ContactInfo
+from src.schemas.delivery import PurchaseDelivery
 from src.schemas.payment import PaymentInfo, PaymentTrackingInfo
 
 
@@ -27,6 +28,7 @@ class PurchaseCreateRequest(BaseModel):
   customer: PurchaseCustomer
   items: list[PurchaseCreateItem] = Field(min_length=1)
   price: int = Field(ge=0)
+  delivery: PurchaseDelivery | None = None
 
 PurchaseContactInfo = ContactInfo
 
@@ -62,6 +64,7 @@ class PurchasePatchProductItem(BaseModel):
 
 
 class PurchaseUpdateRequest(BaseModel):
+  delivery: PurchaseDelivery | None = None
   contact_info: PurchaseContactInfo | None = None
   products: list[PurchasePatchProductItem] | None = Field(default=None, min_length=1)
   final_price: int | None = Field(default=None, ge=0)
@@ -82,6 +85,7 @@ class PurchaseItem(BaseModel):
   payment_id: int | None
   products: list[PurchaseProductItem]
   contact_info: PurchaseContactInfo
+  delivery: PurchaseDelivery | None = None
   payment: PaymentInfo | None
   status: PurchaseStatus
   created_ts: int
@@ -89,7 +93,10 @@ class PurchaseItem(BaseModel):
 
 
 class PurchaseResponse(PurchaseItem):
-  pass
+  delivery_editable: bool = True
+  delivery_update_status: str | None = None
+  delivery_status: dict | None = None
+  delivery_can_dispatch: bool = False
 
 
 class PurchasesResponse(BaseModel):
@@ -103,6 +110,7 @@ class PurchaseTrackingPurchaseInfo(BaseModel):
   final_price: int | None = None
   status: PurchaseStatus
   contact_info: PurchaseContactInfo
+  delivery: PurchaseDelivery | None = None
 
 
 class PurchaseTrackingResponse(BaseModel):
