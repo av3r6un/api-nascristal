@@ -103,6 +103,11 @@ class PurchasesResponse(BaseModel):
   items: list[PurchaseItem]
 
 
+class PurchaseTrackingDelivery(PurchaseDelivery):
+  tracking_number: str | None = None
+  status: str | None = None
+
+
 class PurchaseTrackingPurchaseInfo(BaseModel):
   id: int
   created_ts: int
@@ -110,7 +115,7 @@ class PurchaseTrackingPurchaseInfo(BaseModel):
   final_price: int | None = None
   status: PurchaseStatus
   contact_info: PurchaseContactInfo
-  delivery: PurchaseDelivery | None = None
+  delivery: PurchaseTrackingDelivery | None = None
 
 
 class PurchaseTrackingResponse(BaseModel):

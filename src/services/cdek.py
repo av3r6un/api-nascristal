@@ -263,8 +263,13 @@ async def _refresh_shipment(session, purchase_id, *, commit=True):
       confirmed = {}
       recipient = entity.get('recipient')
       if isinstance(recipient, dict):
-        confirmed['recipient'] = {**row.details.get('recipient', {}),
-          **{key: value for key, value in recipient.items() if key in Recipient.model_fields}}
+        local_recipient = row.details.get('recipient', {})
+        confirmed['recipient'] = {**local_recipient,
+          **{key: value for key, value in recipient.items() if key in Recipient.model_fields},
+          'contragent_type': local_recipient.get('contragent_type', recipient.get('contragent_type', 'INDIVIDUAL'))}
+        if confirmed['recipient']['contragent_type'] == 'INDIVIDUAL':
+          confirmed['recipient'].update(company=None, tin=None)
+          confirmed['recipient'].pop('company_name', None)
       delivery_sum = (entity.get('delivery_detail') or {}).get('delivery_sum')
       charge = (entity.get('delivery_recipient_cost') or {}).get('value')
       try:

@@ -82,6 +82,7 @@ def describe(module, enabled, config, saved):
   return dict(code=module.code, name=module.name, type=module.type, enabled=enabled,
     configured=bool(config.account and config.secure_password), source='database' if saved else 'defaults',
     capabilities=module.capabilities, config=data,
+    environment_selectable=settings.STAGE == 'DEV',
     account_configured=bool(config.account), secure_password_configured=bool(config.secure_password),
     webhook_secret_configured=bool(config.webhook_secret),
     config_schema=module.config_schema.model_json_schema(),
