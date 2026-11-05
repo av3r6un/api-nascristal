@@ -70,6 +70,7 @@ class Package(StrictModel):
 
 
 class CdekConfig(StrictModel):
+  environment: Literal['test', 'production'] = 'test'
   webhooks_enabled: bool = False
   webhook_url: str | None = Field(default=None, max_length=2048)
   webhook_secret: SecretStr | None = Field(default=None, min_length=32)
@@ -88,15 +89,11 @@ class CdekConfig(StrictModel):
 
   @model_validator(mode='before')
   @classmethod
-  def ignore_legacy_environment(cls, value):
-    if isinstance(value, dict):
-      return {key: item for key, item in value.items() if key != 'environment'}
-    return value
-
-  @property
-  def environment(self):
+  def select_environment(cls, value):
     from src.core.config import settings
-    return 'test' if settings.STAGE == 'DEV' else 'production'
+    if settings.STAGE != 'DEV' and isinstance(value, dict):
+      return {**value, 'environment': 'production'}
+    return value
 
   def stored(self):
     result = self.model_dump(mode='json')

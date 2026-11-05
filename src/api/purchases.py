@@ -272,7 +272,13 @@ def _serialize_payment(payment: Payment | None) -> dict | None:
   }
 
 
-def _serialize_purchase_tracking(payment: Payment | None, purchase: Purchase) -> dict:
+async def _serialize_purchase_tracking(session: AsyncSession, payment: Payment | None, purchase: Purchase) -> dict:
+  shipment = await session.scalar(select(DeliveryShipment).where(
+    DeliveryShipment.purchase_id == purchase.id, DeliveryShipment.provider == 'cdek'))
+  delivery = purchase.delivery
+  if shipment and (delivery is None or delivery.get('module') == shipment.provider):
+    delivery = {**(delivery or {'module': shipment.provider, 'data': {}}),
+      'tracking_number': shipment.tracking_number, 'status': shipment.status}
   contact_info = normalize_contact_info(purchase.contact_info)
   return {
     "purchase": {
@@ -281,7 +287,7 @@ def _serialize_purchase_tracking(payment: Payment | None, purchase: Purchase) ->
       "price": purchase.final_price,
       "status": purchase.status.value,
       "contact_info": contact_info,
-      "delivery": purchase.delivery,
+      "delivery": delivery,
     },
     "payment": (
       {
@@ -647,7 +653,7 @@ async def get_purchase_by_uuid(purchase_uuid: str, session: AsyncSession = Depen
   payment = await Payment.first(session, id=purchase.payment_id) if purchase.payment_id is not None else None
   if payment is not None:
     payment = await refresh_payment_state(session, payment, purchase)
-  return _serialize_purchase_tracking(payment, purchase)
+  return await _serialize_purchase_tracking(session, payment, purchase)
 
 
 @router.post("/by-uuid/{purchase_uuid}/payment", response_model=PurchaseTrackingResponse, response_model_exclude_none=True, status_code=200)
@@ -658,7 +664,7 @@ async def create_purchase_payment_by_uuid(purchase_uuid: str, session: AsyncSess
     payment = await refresh_payment_state(session, payment, purchase)
 
   if payment is not None and payment.status == ProviderPaymentStatus.SUCCEEDED.value:
-    return _serialize_purchase_tracking(payment, purchase)
+    return await _serialize_purchase_tracking(session, payment, purchase)
   if purchase.status != PurchaseStatus.AWAITING_PAYMENT:
     raise JSRError("bad_request", message="Purchase is not awaiting payment")
 
@@ -676,7 +682,7 @@ async def create_purchase_payment_by_uuid(purchase_uuid: str, session: AsyncSess
   await session.refresh(purchase)
   await session.refresh(payment)
   await apply_successful_payment(session, payment, purchase)
-  return _serialize_purchase_tracking(payment, purchase)
+  return await _serialize_purchase_tracking(session, payment, purchase)
 
 
 @router.get("/{purchase_id}", response_model=PurchaseResponse, status_code=200, dependencies=[Depends(staff)])
@@ -696,6 +702,7 @@ async def update_purchase(
     if payload.model_fields_set != {'delivery'}:
       raise JSRError('bad_request', message='Update delivery separately from payment or product details')
     purchase = await cdek.save_purchase_delivery(session, purchase_id, payload.delivery)
+    await session.refresh(purchase)
     return await _serialize_purchase_with_refs(session, purchase)
   if payload.products is not None:
     offer_ids = [item.id for item in payload.products]
