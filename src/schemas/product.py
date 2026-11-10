@@ -29,6 +29,7 @@ class StockAvailabilityResponse(BaseModel):
 class ProductResponse(BaseModel):
   id: int
   uuid: UUID
+  has_discounts: bool
   sku: str | None
   name: str
   description: str | None

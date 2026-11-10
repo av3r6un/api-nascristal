@@ -46,16 +46,29 @@ async def lock_purchase(session: AsyncSession, purchase_id: int) -> Purchase:
 def build_order_payload(purchase: Purchase, products_by_id: dict) -> dict:
   contact = normalize_contact_info(purchase.contact_info)
   positions = []
+  discounts = []
   total = Decimal(0)
   for product_id in dict.fromkeys(purchase.product_ids):
     product = products_by_id.get(product_id)
     quantity = purchase.product_quantities.get(str(product_id), 0)
-    if product is None or product.archived or not product.offer or not product.offer.is_active or quantity < 1:
+    line = (purchase.price_snapshot or {}).get(str(product_id))
+    if quantity < 1 or (line is None and (
+      product is None or product.archived or not product.offer or not product.offer.is_active
+    )):
       raise JSRError("bad_request", message=f"Product {product_id} is unavailable")
-    price = Decimal(str(product.offer.amount)) * 100
+    price = Decimal(line["unit"] if line else str(product.offer.amount)) * 100
     if price < 0 or price != price.to_integral_value():
       raise JSRError("bad_request", message=f"Invalid price for product {product_id}")
-    positions.append({"quantity": quantity, "price": int(price), "assortment": entity_ref('variant', str(product.uuid))})
+    position = {"quantity": quantity, "price": int(price),
+      "assortment": entity_ref('variant', line["variant_uuid"] if line else str(product.uuid))}
+    if line and line["percent"]:
+      base = Decimal(line["base"])
+      percent = Decimal(line["percent"])
+      discounts.append(f'Скидка: {line["name"]}, {percent}% ({base:.2f} → {price / 100:.2f} ₽ за ед.)')
+      # Preserve the exact receipt total when percentage math needs unit rounding.
+      if base * (100 - percent) == price:
+        position.update(price=int(base * 100), discount=float(percent))
+    positions.append(position)
     total += price * quantity
   if not positions or len(positions) > 1000 or total != Decimal(purchase.final_price) * 100:
     raise JSRError("bad_request", message="Order total does not match items")
@@ -70,6 +83,7 @@ def build_order_payload(purchase: Purchase, products_by_id: dict) -> dict:
       f'Среда: {settings.STAGE}',
       f'Номер заявки сайта: {purchase.id}',
       f'Статус сайта: {purchase.status.value}',
+      *discounts,
       *[f'{key}: {contact[key]}' for key in ('name', 'phone', 'email', 'username') if contact.get(key)],
     ]),
   }
@@ -136,6 +150,8 @@ async def sync_purchase(session: AsyncSession, purchase: Purchase, products_by_i
           raise JSRError('conflict', message='Linked MoySklad order is unavailable')
         order = await client.create('customerorder', build_order_payload(purchase, products_by_id), headers=headers)
         order_id = verify_order(order, purchase)
+      if purchase.price_snapshot is not None and order.get('sum') != int(purchase.final_price * 100):
+        raise JSRError('conflict', message='MoySklad order total does not match the purchase')
       if submission is None:
         session.add(PurchaseSubmission(uuid=sync_uuid(purchase), order_id=order_id, purchase_id=purchase.id))
         await session.flush()

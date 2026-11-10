@@ -12,6 +12,7 @@ from src.models import Offer, Product, ProductVariant
 from src.models.sync import SyncTask
 from src.schemas.moysklad_webhook import MoyskladStockWebhook
 from src.services.moysklad_client import MoySkladClient, MoySkladError
+from src.services.moysklad_discounts import reconcile_discounts
 from src.services.moysklad_import import MoySkladImportError, MoySkladImportService
 
 
@@ -197,11 +198,12 @@ async def run_moysklad_sync():
       now = datetime.now(MOSCOW)
       if now >= next_reconciliation:
         next_reconciliation = now.replace(hour=5, minute=0, second=0, microsecond=0) + timedelta(days=1)
-        try:
-          await reconcile_stock()
-        except Exception as exc:
-          logger.warning('MoySklad stock reconciliation failed: error=%s detail=%s',
-            type(exc).__name__, getattr(exc, 'orig', exc))
+        for entity, reconcile in (('stock', reconcile_stock), ('discount', reconcile_discounts)):
+          try:
+            await reconcile()
+          except Exception as exc:
+            logger.warning('MoySklad %s reconciliation failed: error=%s detail=%s',
+              entity, type(exc).__name__, getattr(exc, 'orig', exc))
       await process_sync_tasks()
     except Exception as exc:
       recovering = True
