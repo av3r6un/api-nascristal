@@ -154,19 +154,37 @@ def _primary_offer(product: Product):
   return offer
 
 
-def _price_int(value: Decimal) -> int:
-  integer_value = value.to_integral_value(rounding=ROUND_HALF_UP)
-  if value != integer_value:
-    raise JSRError("bad_request", message=f"Purchase total {value} must be a whole number")
-  return int(integer_value)
+async def _snapshot_prices(session, products_by_id, quantities):
+  from src.services.product_service import ProductService
+
+  discounts = await ProductService(session)._discounts()
+  snapshot = {}
+  for product_id in quantities:
+    product = products_by_id[product_id]
+    offer = _primary_offer(product)
+    if product.archived or product.product.archived:
+      raise JSRError("bad_request", message=f"Product {product_id} is unavailable")
+    rules = ProductService.applicable_discounts(discounts, product.product.uuid, product.uuid)
+    rule = max(rules, key=lambda rule: Decimal(rule["percent"]), default=None)
+    base = _money(offer.amount)
+    percent = Decimal(rule["percent"]) if rule else Decimal(0)
+    unit = _money(base * (100 - percent) / 100)
+    snapshot[str(product_id)] = {
+      "name": product.name, "base": _format_money(base), "unit": _format_money(unit),
+      "percent": rule["percent"] if rule else None,
+      "discount_uuid": str(rule["uuid"]) if rule else None,
+      "variant_uuid": str(product.uuid),
+    }
+  return snapshot
 
 
 def _build_receipt_for_purchase(
   *,
   customer_email: str | None,
-  price: int,
+  price: Decimal,
   products_by_id: dict[int, Product],
   quantities_by_product: dict[int, int],
+  price_snapshot: dict | None = None,
 ) -> dict:
   if not customer_email:
     raise JSRError("bad_request", message="Customer email is required for card payment receipt")
@@ -175,14 +193,16 @@ def _build_receipt_for_purchase(
   total = Decimal("0.00")
   for product_id, quantity in quantities_by_product.items():
     product = products_by_id.get(product_id)
-    if product is None:
+    line = (price_snapshot or {}).get(str(product_id))
+    if product is None and line is None:
       raise JSRError("not_found", message=f"Product not found: {product_id}")
 
-    offer = _primary_offer(product)
-    unit_amount = _money(offer.amount)
+    unit_amount = Decimal(line["unit"]) if line else _money(_primary_offer(product).amount)
+    name = line["name"] if line else product.name
+    suffix = f' (скидка {line["percent"]}%)' if line and line["percent"] else ""
     total += unit_amount * quantity
     items.append({
-      "description": product.name[:128],
+      "description": name[:128 - len(suffix)] + suffix,
       "quantity": quantity,
       "amount": {
         "value": _format_money(unit_amount),
@@ -208,7 +228,9 @@ def _build_receipt_for_purchase(
   }
 
 
-def _calculate_purchase_total(products_by_id: dict[int, Product], quantities_by_product: dict[int, int]) -> Decimal:
+def _calculate_purchase_total(products_by_id: dict[int, Product], quantities_by_product: dict[int, int], snapshot=None) -> Decimal:
+  if snapshot is not None:
+    return sum((Decimal(snapshot[str(key)]["unit"]) * quantity for key, quantity in quantities_by_product.items()), Decimal(0))
   total = Decimal("0.00")
   for product_id, quantity in quantities_by_product.items():
     product = products_by_id.get(product_id)
@@ -225,7 +247,6 @@ def _purchase_quantities_as_ints(purchase: Purchase) -> dict[int, int]:
 def _payment_fingerprint(
   *,
   contact_info: dict,
-  products_by_id: dict[int, Product],
   quantities_by_product: dict[int, int],
 ) -> dict:
   return {
@@ -235,7 +256,6 @@ def _payment_fingerprint(
         (
           product_id,
           quantity,
-          _price_int(_money(_primary_offer(products_by_id[product_id]).amount)),
         )
         for product_id, quantity in quantities_by_product.items()
       )
@@ -353,7 +373,7 @@ def _serialize_purchase(
       "id": offer.id,
       "sku": product.sku,
       "name": product.name,
-      "price": _price_int(_money(offer.amount)),
+      "price": Decimal(purchase.price_snapshot[str(product_id)]["unit"]) if purchase.price_snapshot else offer.amount,
       "quantity": {
         "value": purchase.product_quantities.get(str(product_id), 0),
         "max": int(offer.quantity),
@@ -505,6 +525,7 @@ async def _create_card_payment_for_purchase(
       price=purchase.final_price,
       products_by_id=products_by_id,
       quantities_by_product=quantities_by_product,
+      price_snapshot=purchase.price_snapshot,
     ),
   )
   payment.description = payment_payload["description"]
@@ -587,6 +608,11 @@ async def create_purchase(
     quantities_by_product[product_id] = quantities_by_product.get(product_id, 0) + item.quantity.value
 
   contact_info = _contact_info(payload)
+  price_snapshot = await _snapshot_prices(session, products_by_id, quantities_by_product)
+  final_price = _calculate_purchase_total(products_by_id, quantities_by_product, price_snapshot)
+  base_total = sum(Decimal(price_snapshot[str(key)]["base"]) * quantity for key, quantity in quantities_by_product.items())
+  if payload.price not in (base_total, final_price) or final_price <= 0:
+    raise JSRError("bad_request", message="Order total does not match items or is zero")
   purchase = Purchase(
     product_ids=product_ids,
     properties=_resolve_properties_by_product(products_by_id, properties_by_product),
@@ -594,14 +620,13 @@ async def create_purchase(
     quantity=sum(item.quantity.value for item in payload.items),
     contact_info=contact_info,
     delivery=await delivery_selection(session, payload.delivery),
-    final_price=payload.price,
+    final_price=final_price,
     purchase_uuid=str(idempotency_key) if idempotency_key else None,
   )
+  purchase.price_snapshot = price_snapshot
   # Validate before persisting. The Purchase itself is the durable retry payload.
   if settings.MOYSKLAD_CHECKOUT_SYNC_ENABLED:
     build_order_payload(purchase, products_by_id)
-  elif _calculate_purchase_total(products_by_id, quantities_by_product) != _money(payload.price):
-    raise JSRError('bad_request', message='Order total does not match items')
   session.add(purchase)
   try:
     await session.commit()
@@ -662,6 +687,8 @@ async def create_purchase_payment_by_uuid(purchase_uuid: str, session: AsyncSess
   payment = await Payment.first(session, id=purchase.payment_id) if purchase.payment_id is not None else None
   if payment is not None:
     payment = await refresh_payment_state(session, payment, purchase)
+  purchase = await lock_purchase(session, purchase.id)
+  payment = await session.get(Payment, purchase.payment_id, populate_existing=True) if purchase.payment_id else None
 
   if payment is not None and payment.status == ProviderPaymentStatus.SUCCEEDED.value:
     return await _serialize_purchase_tracking(session, payment, purchase)
@@ -728,7 +755,6 @@ async def update_purchase(
   old_contact_info = normalize_contact_info(purchase.contact_info)
   old_fingerprint = _payment_fingerprint(
     contact_info=old_contact_info,
-    products_by_id=products_by_id,
     quantities_by_product=old_quantities_by_product,
   )
   contact_info = (
@@ -738,13 +764,16 @@ async def update_purchase(
   )
   new_fingerprint = _payment_fingerprint(
     contact_info=contact_info,
-    products_by_id=products_by_id,
     quantities_by_product=quantities_by_product,
   )
   payment_inputs_changed = old_fingerprint != new_fingerprint
 
-  calculated_total = _calculate_purchase_total(products_by_id, quantities_by_product)
-  calculated_final_price = _price_int(calculated_total)
+  snapshot = purchase.price_snapshot
+  if payload.products is not None and old_quantities_by_product != quantities_by_product:
+    snapshot = await _snapshot_prices(session, products_by_id, quantities_by_product)
+  calculated_final_price = _calculate_purchase_total(products_by_id, quantities_by_product, snapshot)
+  if calculated_final_price <= 0:
+    raise JSRError("bad_request", message="Order total is zero")
   if payload.final_price is not None and payload.final_price != calculated_final_price:
     raise JSRError(
       "bad_request",
@@ -758,6 +787,7 @@ async def update_purchase(
     purchase.quantity = sum(quantities_by_product.values())
 
   purchase.contact_info = contact_info
+  purchase.price_snapshot = snapshot
   purchase.final_price = payload.final_price if payload.final_price is not None else calculated_final_price
   existing_payment = await Payment.first(session, id=purchase.payment_id) if purchase.payment_id is not None else None
   if (
@@ -767,14 +797,16 @@ async def update_purchase(
   ):
     payment_inputs_changed = True
   if (
-    purchase.status == PurchaseStatus.AWAITING_PAYMENT
-    and payment_inputs_changed
-    and existing_payment is not None
+    existing_payment is not None
     and existing_payment.status == ProviderPaymentStatus.SUCCEEDED.value
   ):
     raise JSRError("bad_request", message="Cannot change payment details for an already paid purchase")
   if purchase.status == PurchaseStatus.AWAITING_PAYMENT and payment_inputs_changed:
     await _cancel_payment_for_purchase(existing_payment)
+    if existing_payment and existing_payment.status not in {
+      ProviderPaymentStatus.CANCELED.value, ProviderPaymentStatus.FAILED.value,
+    }:
+      raise JSRError('conflict', message='Previous payment could not be canceled')
   await _start_purchase_payment(
     session=session,
     purchase=purchase,

@@ -1,3 +1,4 @@
+from decimal import Decimal
 from pydantic import BaseModel, Field
 
 from src.models.purchase import PurchaseStatus
@@ -27,7 +28,7 @@ class PurchaseCustomer(BaseModel):
 class PurchaseCreateRequest(BaseModel):
   customer: PurchaseCustomer
   items: list[PurchaseCreateItem] = Field(min_length=1)
-  price: int = Field(ge=0)
+  price: Decimal = Field(ge=0, decimal_places=2)
   delivery: PurchaseDelivery | None = None
 
 PurchaseContactInfo = ContactInfo
@@ -67,14 +68,14 @@ class PurchaseUpdateRequest(BaseModel):
   delivery: PurchaseDelivery | None = None
   contact_info: PurchaseContactInfo | None = None
   products: list[PurchasePatchProductItem] | None = Field(default=None, min_length=1)
-  final_price: int | None = Field(default=None, ge=0)
+  final_price: Decimal | None = Field(default=None, ge=0, decimal_places=2)
 
 
 class PurchaseProductItem(BaseModel):
   id: int = Field(gt=0, description="Offer ID")
   sku: str
   name: str
-  price: int
+  price: float
   quantity: PurchaseQuantity
   properties: list[PurchasePropertyItem]
 
@@ -111,7 +112,7 @@ class PurchaseTrackingDelivery(PurchaseDelivery):
 class PurchaseTrackingPurchaseInfo(BaseModel):
   id: int
   created_ts: int
-  price: int | None = None
+  price: float | None = None
   final_price: int | None = None
   status: PurchaseStatus
   contact_info: PurchaseContactInfo

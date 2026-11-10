@@ -1,7 +1,8 @@
 import enum
 import uuid
+from decimal import Decimal
 
-from sqlalchemy import Enum, ForeignKey, Integer, JSON, String, Uuid
+from sqlalchemy import Enum, ForeignKey, Integer, JSON, Numeric, String, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from uuid import UUID
 
@@ -27,7 +28,8 @@ class Purchase(Base):
   quantity: Mapped[int] = mapped_column(Integer, nullable=False)
   contact_info: Mapped[dict] = mapped_column(JSON, nullable=False)
   delivery: Mapped[dict | None] = mapped_column(JSON, nullable=True)
-  final_price: Mapped[int] = mapped_column(Integer, nullable=False)
+  final_price: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
+  price_snapshot: Mapped[dict | None] = mapped_column(JSON, nullable=True)
   status: Mapped[PurchaseStatus] = mapped_column(
     Enum(PurchaseStatus),
     nullable=False,
@@ -43,7 +45,7 @@ class Purchase(Base):
     product_quantities: dict[str, int],
     quantity: int,
     contact_info: dict,
-    final_price: int,
+    final_price: Decimal,
     payment_id: int | None = None,
     purchase_uuid: str | None = None,
     status: PurchaseStatus | str = PurchaseStatus.CREATED,

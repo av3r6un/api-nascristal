@@ -8,14 +8,14 @@ from src.core.config import settings
 from src.exceptions import JSRError
 
 
-def _price_to_amount_value(price: int) -> str:
+def _price_to_amount_value(price: int | Decimal) -> str:
   amount = Decimal(price).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
   return format(amount, "f")
 
 
 def build_yookassa_payment_payload(
   *,
-  price: int,
+  price: int | Decimal,
   description: str,
   return_url: str,
   metadata: dict[str, str],

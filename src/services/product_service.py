@@ -10,6 +10,8 @@ from src.models import (
   Attribute,
   AttributeOption,
   Category,
+  Discount,
+  DiscountProduct,
   Offer,
   Product,
   ProductAttribute,
@@ -143,7 +145,7 @@ class ProductService:
     if limit is not None:
       query = query.offset(page * limit).limit(limit + 1)
     products = (await self.session.execute(query)).scalars().all()
-    return self._response(
+    return await self._response(
       products,
       page,
       limit,
@@ -223,7 +225,7 @@ class ProductService:
       relationships=["category", "variants.attributes.option.attribute", "variants.offer"],
     )
     if not product: raise JSRError('not_found', message=f'Product[{id}] is not found!')
-    item = self._serialize(product, public=True)
+    item = self._serialize(product, True, await self._discounts())
     if item is None:
       raise JSRError('not_found', message=f'Product[{id}] is not available!')
     return item
@@ -259,7 +261,7 @@ class ProductService:
       query = query.where(Product.category_id.in_(categories))
 
     products = (await self.session.execute(query)).scalars().all()
-    return self._response(products, page, limit, public=True, page_size=limit)
+    return await self._response(products, page, limit, public=True, page_size=limit)
 
   async def _get_stock_availability(self, **filters) -> dict[str, Any]:
     normalized_filters = self._normalize_stock_filters(filters)
@@ -388,7 +390,32 @@ class ProductService:
       categories=[category.json for category in categories],
     )
 
-  def _response(
+  async def _discounts(self) -> dict:
+    query = (
+      select(Discount, DiscountProduct.entity_type, DiscountProduct.entity_uuid)
+      .outerjoin(DiscountProduct, DiscountProduct.discount_id == Discount.id)
+      .where(Discount.active.is_(True), Discount.amount > 0)
+      .order_by(Discount.id)
+    )
+    rules = {}
+    for discount, entity_type, entity_uuid in await self.session.execute(query):
+      key = None if discount.all_products else (entity_type, entity_uuid)
+      rules.setdefault(key, {})[discount.id] = {
+        "uuid": discount.uuid,
+        "name": discount.name,
+        "percent": format(discount.amount.normalize(), "f"),
+      }
+    return rules
+
+  @staticmethod
+  def applicable_discounts(discounts: dict, product_uuid, variant_uuid) -> list[dict]:
+    return list((
+      discounts.get(None, {})
+      | discounts.get(("product", product_uuid), {})
+      | discounts.get(("variant", variant_uuid), {})
+    ).values())
+
+  async def _response(
     self,
     products: list[Product],
     page: int,
@@ -399,7 +426,11 @@ class ProductService:
     total_pages: int | None = None,
   ) -> dict[str, Any]:
     page_products = products if limit is None else products[:limit]
-    items = [item for product in page_products if (item := self._serialize(product, public)) is not None]
+    discounts = await self._discounts() if page_products else {}
+    items = [
+      item for product in page_products
+      if (item := self._serialize(product, public, discounts)) is not None
+    ]
     response = {
       "items": items,
       "page_index": page,
@@ -412,7 +443,7 @@ class ProductService:
       response["total_pages"] = total_pages
     return response
 
-  def _serialize(self, product: Product, public: bool) -> dict[str, Any] | None:
+  def _serialize(self, product: Product, public: bool, discounts: dict) -> dict[str, Any] | None:
     variants = sorted(
       product.variants,
       key=lambda variant: (variant.archived, variant.name.lower(), variant.id),
@@ -437,6 +468,12 @@ class ProductService:
       for variant in variants
     ]
     item["variants_count"] = sum(v.offer.quantity for v in variants)
+    for variant, variant_item in zip(variants, item["variants"]):
+      applicable = []
+      if not product.archived and not variant.archived and variant.offer.is_active:
+        applicable = self.applicable_discounts(discounts, product.uuid, variant.uuid)
+      variant_item["offer"]["discounts"] = applicable
+    item["has_discounts"] = any(variant["offer"]["discounts"] for variant in item["variants"])
     first_variant_key = next(
       (variant.image_key for variant in variants if variant.image_key),
       None,
