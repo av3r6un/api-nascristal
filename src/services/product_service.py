@@ -382,12 +382,15 @@ class ProductService:
     attributes = (await self.session.scalars(
       select(Attribute).options(raiseload("*"), selectinload(Attribute.options))
     )).all()
-    categories = (await self.session.scalars(
-      select(Category).options(raiseload("*"))
-    )).all()
+    categories = await self.session.execute(
+      select(Category, ~Category.products.any()).options(raiseload("*"))
+    )
     return dict(
       attributes=[attribute.json for attribute in attributes],
-      categories=[category.json for category in categories],
+      categories=[
+        dict(category.json, empty=True) if empty else category.json
+        for category, empty in categories
+      ],
     )
 
   async def _discounts(self) -> dict:

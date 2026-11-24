@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, Request
-from sqlalchemy import select
+from sqlalchemy import delete, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.change_logging import record_change
@@ -8,8 +9,10 @@ from src.exceptions import JSRError
 from src.models import Category
 from src.schemas import CategoriesPatchRequest, CategoriesResponse
 
+from .delivery import staff
 
-router = APIRouter(prefix="/api/categories", tags=["categories"])
+
+router = APIRouter(prefix="/api", tags=["categories"])
 
 
 async def _fetch_categories(session: AsyncSession) -> list[Category]:
@@ -18,13 +21,13 @@ async def _fetch_categories(session: AsyncSession) -> list[Category]:
   return result.scalars().all()
 
 
-@router.get("/", response_model=CategoriesResponse, status_code=200)
+@router.get("/categories/", response_model=CategoriesResponse, status_code=200)
 async def get_categories(session: AsyncSession = Depends(get_db)) -> dict[str, list[dict]]:
   categories = await _fetch_categories(session)
   return {"items": [category.json for category in categories]}
 
 
-@router.patch("/", response_model=CategoriesResponse, status_code=200)
+@router.patch("/categories/", response_model=CategoriesResponse, status_code=200)
 async def patch_categories(
   payload: CategoriesPatchRequest,
   request: Request,
@@ -57,3 +60,25 @@ async def patch_categories(
 
   categories = await _fetch_categories(session)
   return {"items": [category.json for category in categories]}
+
+
+@router.delete("/category/{id}", status_code=204, dependencies=[Depends(staff)])
+async def delete_category(id: int, request: Request, session: AsyncSession = Depends(get_db)) -> None:
+  query = (
+    delete(Category)
+    .where(Category.id == id, ~Category.products.any())
+    .execution_options(synchronize_session=False)
+  )
+  try:
+    result = await session.execute(query)
+  except IntegrityError as exc:
+    await session.rollback()
+    raise JSRError("conflict", message=f"Category {id} is in use") from exc
+
+  if result.rowcount == 0:
+    category_id = await session.scalar(select(Category.id).where(Category.id == id))
+    if category_id is None:
+      raise JSRError("not_found", message=f"Category {id} not found")
+    raise JSRError("conflict", message=f"Category {id} has products")
+
+  await record_change(session, "categories.deleted", payload={"ids": [id]}, actor_uid=request.state.user_uid)
