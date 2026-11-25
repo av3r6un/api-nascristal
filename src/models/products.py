@@ -27,11 +27,15 @@ class Product(Base):
   variants: Mapped[List[ProductVariant]] = relationship("ProductVariant", back_populates="product", lazy="selectin") # type: ignore
   
   @property
-  def json(self):
+  def base_json(self):
     return dict(
       id=self.id, uuid=self.uuid, sku=self.sku, name=self.name, description=self.description, archived=self.archived,
-      category=self.category.json, variants=[a.json for a in self.variants], images=[]
+      category=self.category.json, images=[]
     )
+
+  @property
+  def json(self):
+    return self.base_json | {"variants": [variant.json for variant in self.variants]}
   
 
 class ProductVariant(Base):
