@@ -100,7 +100,7 @@ async def _get_products_by_offer_ids_or_404(session: AsyncSession, offer_ids: li
   return products_by_offer_id
 
 
-def _resolve_property_option_eids(product: Product, properties: list[str]) -> list[str]:
+def _resolve_property_option_eids(product: Product, properties: list[str], *, prefer_values: bool = False) -> list[str]:
   options_by_value = {}
   options_by_eid = {}
   for attribute in product.attributes:
@@ -112,8 +112,9 @@ def _resolve_property_option_eids(product: Product, properties: list[str]) -> li
 
   resolved = []
   missing = []
+  primary, secondary = (options_by_value, options_by_eid) if prefer_values else (options_by_eid, options_by_value)
   for property_value in properties:
-    option_eid = options_by_eid.get(property_value) or options_by_value.get(property_value)
+    option_eid = primary.get(property_value) or secondary.get(property_value)
     if option_eid is None:
       missing.append(property_value)
     else:
@@ -604,9 +605,22 @@ async def create_purchase(
   quantities_by_product: dict[int, int] = {}
   for item in payload.items:
     product_id = products_by_offer_id[item.id].id
-    properties_by_product.setdefault(product_id, []).extend(item.properties)
+    if "properties" in item.model_fields_set:
+      properties_by_product.setdefault(product_id, []).extend(item.properties)
     quantities_by_product[product_id] = quantities_by_product.get(product_id, 0) + item.quantity.value
 
+  # Older carts only saved display labels. Recover the options from the selected offer.
+  properties = {}
+  for product_id, product in products_by_id.items():
+    if product_id in properties_by_product:
+      option_ids = _resolve_property_option_eids(product, properties_by_product[product_id], prefer_values=True)
+    else:
+      option_ids = [
+        str(attribute.option.id)
+        for attribute in product.attributes
+        if attribute.option is not None and attribute.option.attribute.name in ("Цвет", "Размер")
+      ]
+    properties[str(product_id)] = option_ids
   contact_info = _contact_info(payload)
   price_snapshot = await _snapshot_prices(session, products_by_id, quantities_by_product)
   final_price = _calculate_purchase_total(products_by_id, quantities_by_product, price_snapshot)
@@ -615,7 +629,7 @@ async def create_purchase(
     raise JSRError("bad_request", message="Order total does not match items or is zero")
   purchase = Purchase(
     product_ids=product_ids,
-    properties=_resolve_properties_by_product(products_by_id, properties_by_product),
+    properties=properties,
     product_quantities=_normalize_quantities_by_product(quantities_by_product),
     quantity=sum(item.quantity.value for item in payload.items),
     contact_info=contact_info,

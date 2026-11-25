@@ -460,7 +460,7 @@ class ProductService:
       if not variants:
         return None
 
-    item = product.json
+    item = product.base_json
     item["variants"] = [
       variant.json | {
         "image_url": (
